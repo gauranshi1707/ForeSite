@@ -12,7 +12,10 @@ from typing import List, Dict, Any, Optional
 from ml.trajectory import classify_trajectory
 from ml.scoring import calculate_urgency_score
 
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "foresite.db")
+if os.environ.get("VERCEL"):
+    DB_FILE = "/tmp/foresite.db"
+else:
+    DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "foresite.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE)
