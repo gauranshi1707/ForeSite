@@ -1,548 +1,590 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
-  AreaChart, Area
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine
 } from 'recharts';
 import {
-  Search, ChevronLeft, ChevronRight, Play, Pause, AlertTriangle,
-  Info, Clock, TrendingUp, RotateCcw, MapPin
+  Search, Play, Pause, ChevronLeft, ChevronRight, AlertTriangle,
+  Info, Clock, TrendingUp, Layers, MapPin, Compass, RotateCcw
 } from 'lucide-react';
+import MapSearchBar from './MapSearchBar';
 
-// ----------------------------------------------------------------
-// Synthetic satellite imagery panel — prototype visualization
-// ----------------------------------------------------------------
-function SatelliteImageryPanel({ parcel, year, isCurrentYear }) {
-  if (!parcel) return (
-    <div className="h-56 bg-stone-100 rounded-lg flex items-center justify-center text-stone-400 text-sm">
-      Select a parcel to view imagery
-    </div>
-  );
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Definitions
+// ─────────────────────────────────────────────────────────────────────────────
+const HERO_YEAR_DATA = {
+  2024: { area: 120,  score: 32, traj: 'Stable',       status: 'Monitoring', risk: 'Low' },
+  2025: { area: 480,  score: 58, traj: 'Growing',      status: 'Alert Flagged', risk: 'Medium' },
+  2026: { area: 920,  score: 85, traj: 'Growing Fast', status: 'Notice Issued', risk: 'High' },
+  2027: { area: 1150, score: 95, traj: 'Re-check Required', status: 'Re-check Required', risk: 'Critical' },
+};
 
-  const area = parcel.history?.[String(year)] ?? 0;
+const YEARS = [2024, 2025, 2026, 2027];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Isometric 3D Map Component
+// ─────────────────────────────────────────────────────────────────────────────
+function IsometricMap({ parcel, year, prevYear, layerMode, options }) {
+  const isProj = year === 2027;
+  
+  // Dimensions and mapping
+  const area = parcel?.is_hero ? (HERO_YEAR_DATA[year]?.area ?? 0) : (parcel?.history?.[String(year)] ?? 0);
+  const prevArea = prevYear ? (parcel?.is_hero ? (HERO_YEAR_DATA[prevYear]?.area ?? 0) : (parcel?.history?.[String(prevYear)] ?? 0)) : 0;
+  
   const maxArea = 1200;
-  const builtPct = Math.min(1, area / maxArea);
+  const builtRatio = Math.min(1, area / maxArea);
+  
+  // Directional growth logic (SE -> NW)
+  const getBounds = (yrArea) => {
+    const ratio = Math.min(1, yrArea / maxArea);
+    const w = 0.15 + ratio * 0.55;
+    const h = 0.15 + ratio * 0.45;
+    return {
+      w: w * 400,
+      h: h * 400,
+      x: 400 - (w * 400) - 80,
+      y: 400 - (h * 400) - 80,
+    };
+  };
 
-  // Vegetation green behind
-  const vegOpacity = Math.max(0.15, 0.7 - builtPct * 0.55);
-  // Built-up block scale
-  const builtScale = Math.min(0.85, 0.08 + builtPct * 0.77);
+  const currentBounds = getBounds(area);
+  const prevBounds = getBounds(prevArea);
 
-  const traj = parcel.trajectory;
-  const builtColor = isCurrentYear && traj === 'GROWING FAST' ? '#c0503a'
-    : isCurrentYear && traj === 'GROWING' ? '#c08030'
-    : '#8a7050';
+  // Extrusion height based on area (simulating building volume)
+  const extrusionHeight = 5 + (builtRatio * 40);
+
+  // Colors based on layer mode
+  let terrainColor = '#e5e5e5';
+  let vegColor = '#d1d5db';
+  let builtTopColor = '#a8a29e';
+  let builtSideColor = '#78716c';
+  let builtFrontColor = '#57534e';
+  
+  if (layerMode === 'TRUE COLOR') {
+    terrainColor = '#c4b898';
+    vegColor = '#a3b18a';
+    builtTopColor = isProj ? '#c05030' : '#d6d3d1';
+    builtSideColor = isProj ? '#9b3020' : '#a8a29e';
+    builtFrontColor = isProj ? '#7a2215' : '#78716c';
+  } else if (layerMode === 'FALSE COLOR') {
+    terrainColor = '#1e1b4b'; // Deep blue/purple
+    vegColor = '#dc2626';     // Red for vegetation in CIR
+    builtTopColor = '#06b6d4'; // Cyan for built-up
+    builtSideColor = '#0891b2';
+    builtFrontColor = '#0e7490';
+  } else if (layerMode === 'BUILT-UP') {
+    terrainColor = '#171717';
+    vegColor = '#262626';
+    // Heatmap style for built-up
+    const intensity = Math.round(150 + builtRatio * 105);
+    builtTopColor = `rgb(255, ${255 - intensity}, 0)`;
+    builtSideColor = `rgb(200, ${200 - (intensity*0.8)}, 0)`;
+    builtFrontColor = `rgb(150, ${150 - (intensity*0.6)}, 0)`;
+  } else if (layerMode === 'CHANGE') {
+    terrainColor = '#f5f5f4';
+    vegColor = '#e7e5e4';
+    builtTopColor = '#d6d3d1';
+    builtSideColor = '#a8a29e';
+    builtFrontColor = '#78716c';
+  }
 
   return (
-    <div className="relative h-56 rounded-lg overflow-hidden border border-stone-200 bg-stone-50">
-      {/* Prototype label */}
-      <div className="absolute top-2 left-2 z-10 bg-white/90 border border-stone-200 text-[9px] font-mono text-stone-500 px-2 py-0.5 rounded">
-        Prototype Synthetic EO — {year}
-      </div>
-
-      {/* Label badge */}
-      <div className={`absolute top-2 right-2 z-10 text-[10px] font-semibold px-2 py-1 rounded border ${
-        isCurrentYear ? 'bg-blue-700 text-white border-blue-800' : 'bg-stone-100 text-stone-600 border-stone-200'
-      }`}>
-        {isCurrentYear ? `CURRENT — ${year}` : `BEFORE — ${year}`}
-      </div>
-
-      {/* Terrain background */}
-      <div className="absolute inset-0" style={{
-        background: `linear-gradient(135deg, #d4e8c8 0%, #c8e0b8 40%, #d8e8c0 70%, #c8d8b0 100%)`,
-        opacity: vegOpacity + 0.3,
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-stone-900 select-none">
+      
+      {/* Background Grid Pattern */}
+      <div className="absolute inset-0 opacity-20" style={{
+        backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)',
+        backgroundSize: '20px 20px'
       }} />
 
-      {/* Grid texture */}
-      <div className="absolute inset-0 opacity-10"
-        style={{ backgroundImage: 'linear-gradient(#666 1px,transparent 1px),linear-gradient(90deg,#666 1px,transparent 1px)', backgroundSize: '20px 20px' }}
-      />
-
-      {/* Roads */}
-      <div className="absolute" style={{ left: '10%', right: '10%', top: '50%', height: 2, background: '#b8a898', opacity: 0.7 }} />
-      <div className="absolute" style={{ left: '50%', top: '10%', bottom: '10%', width: 2, background: '#b8a898', opacity: 0.7 }} />
-
-      {/* Land parcel outline */}
-      <div className="absolute inset-6 border border-dashed border-stone-400 rounded opacity-60" />
-
-      {/* Built-up footprint visualization */}
-      {area > 0 && (
-        <div
-          className="absolute rounded transition-all duration-500"
-          style={{
-            bottom: `${(1 - builtScale) * 50 + 8}%`,
-            left: `${(1 - builtScale) * 50 + 8}%`,
-            width: `${builtScale * 84}%`,
-            height: `${builtScale * 84}%`,
-            background: builtColor,
-            opacity: 0.55 + builtPct * 0.25,
-          }}
+      {/* The 3D World Container */}
+      <div 
+        style={{
+          width: 400, height: 400,
+          transformStyle: 'preserve-3d',
+          transform: 'rotateX(60deg) rotateZ(45deg)',
+          transition: 'transform 0.5s ease',
+        }}
+        className="relative"
+      >
+        {/* Terrain Base */}
+        <div 
+          className="absolute inset-0 shadow-2xl transition-colors duration-500"
+          style={{ background: terrainColor, border: '1px solid rgba(255,255,255,0.1)' }}
         >
-          {/* Building grid effect */}
-          <div className="absolute inset-0 opacity-30"
-            style={{ backgroundImage: 'linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)', backgroundSize: '10px 10px' }}
-          />
+          {/* Parcel Boundary */}
+          {options.showParcel && (
+            <div className="absolute inset-4 border-2 border-dashed border-stone-800/40" />
+          )}
+
+          {/* Vegetation Patches (abstract) */}
+          {options.showVeg && (
+            <>
+              <div className="absolute top-8 left-8 w-32 h-24 rounded-full blur-xl opacity-60 transition-colors duration-500" style={{ background: vegColor }} />
+              <div className="absolute bottom-16 left-12 w-24 h-32 rounded-full blur-xl opacity-50 transition-colors duration-500" style={{ background: vegColor }} />
+            </>
+          )}
+
+          {/* Roads */}
+          {options.showRoads && (
+            <>
+              <div className="absolute top-0 bottom-0 left-1/2 w-4 bg-stone-800/10" />
+              <div className="absolute left-0 right-0 top-1/3 h-3 bg-stone-800/10" />
+            </>
+          )}
+
+          {/* Previous Footprint Ghosting */}
+          {options.showPrev && prevArea > 0 && (
+            <div 
+              className="absolute border-2 border-dashed border-stone-800/40 bg-stone-800/10 transition-all duration-700 ease-in-out"
+              style={{
+                left: prevBounds.x, top: prevBounds.y,
+                width: prevBounds.w, height: prevBounds.h,
+              }}
+            />
+          )}
+
+          {/* Extruded 3D Building */}
+          {options.showBuilt && area > 0 && (
+            <div
+              className="absolute transition-all duration-700 ease-in-out"
+              style={{
+                left: currentBounds.x, top: currentBounds.y,
+                width: currentBounds.w, height: currentBounds.h,
+                transformStyle: 'preserve-3d'
+              }}
+            >
+              {/* Change Highlight Base (renders underneath if CHANGE mode) */}
+              {layerMode === 'CHANGE' && prevArea > 0 && area > prevArea && (
+                <div 
+                  className="absolute bg-rose-500/80 animate-pulse transition-all duration-700 ease-in-out"
+                  style={{
+                    left: prevBounds.x - currentBounds.x,
+                    top: prevBounds.y - currentBounds.y,
+                    width: prevBounds.w, height: prevBounds.h,
+                    boxShadow: '0 0 20px 10px rgba(244,63,94,0.4)'
+                  }}
+                />
+              )}
+
+              {/* Top Face */}
+              <div 
+                className="absolute inset-0 transition-all duration-700 ease-in-out flex items-center justify-center"
+                style={{
+                  background: builtTopColor,
+                  transform: `translateZ(${extrusionHeight}px)`,
+                  boxShadow: 'inset 0 0 10px rgba(255,255,255,0.1)'
+                }}
+              >
+                {/* Grid texture on roof */}
+                <div className="absolute inset-0 opacity-20" style={{
+                  backgroundImage: 'linear-gradient(rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px)',
+                  backgroundSize: '10px 10px'
+                }} />
+              </div>
+
+              {/* Front Face (South) */}
+              <div 
+                className="absolute bottom-0 left-0 right-0 origin-bottom transition-all duration-700 ease-in-out"
+                style={{
+                  height: extrusionHeight,
+                  background: builtFrontColor,
+                  transform: `rotateX(-90deg)`,
+                }}
+              />
+
+              {/* Side Face (East) */}
+              <div 
+                className="absolute top-0 bottom-0 right-0 origin-right transition-all duration-700 ease-in-out"
+                style={{
+                  width: extrusionHeight,
+                  background: builtSideColor,
+                  transform: `rotateY(90deg)`,
+                }}
+              />
+
+              {/* Shadow */}
+              <div 
+                className="absolute inset-0 bg-black/30 blur-md transition-all duration-700 ease-in-out"
+                style={{
+                  transform: `translateZ(-1px) translateX(10px) translateY(10px)`,
+                }}
+              />
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* ── Overlay UI Elements ── */}
+      
+      {/* North Arrow */}
+      <div className="absolute top-6 right-6 flex flex-col items-center opacity-70">
+        <Compass size={24} className="text-stone-400" />
+        <span className="text-[9px] font-bold text-stone-500 mt-1">N</span>
+      </div>
+
+      {/* Scale & Coordinates */}
+      <div className="absolute bottom-6 right-6 text-right">
+        <div className="flex items-center justify-end gap-2 mb-1">
+          <div className="w-16 h-1 bg-stone-500/50 relative border-x border-stone-400" />
+          <span className="text-[10px] font-mono text-stone-400">100m</span>
+        </div>
+        <div className="text-[10px] font-mono text-stone-500">28.58° N, 77.05° E</div>
+      </div>
+
+      {/* Data Honesty Label */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md border border-stone-700 rounded-full px-4 py-1.5 flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-[10px] font-mono font-medium text-stone-300 uppercase tracking-wider">
+          Prototype Synthetic EO Dataset
+        </span>
+      </div>
+
+      {isProj && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 bg-rose-900/80 backdrop-blur-md border border-rose-500/50 rounded px-3 py-1 text-[11px] font-bold text-rose-200 uppercase tracking-widest shadow-lg shadow-rose-900/20">
+          Projected Scenario — Not Observed
         </div>
       )}
-
-      {/* Area label */}
-      <div className="absolute bottom-2 left-2 bg-white/90 border border-stone-200 text-[11px] font-mono font-bold text-stone-800 px-2 py-1 rounded">
-        {area} m² built-up
-      </div>
     </div>
   );
 }
 
-// ----------------------------------------------------------------
-// Custom recharts tooltip
-// ----------------------------------------------------------------
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-stone-200 rounded-lg px-3 py-2 shadow-md text-[11px]">
-      <div className="font-semibold text-stone-700 mb-1">{label}</div>
-      {payload.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.color }} />
-          <span className="text-stone-600">{p.name}:</span>
-          <span className="font-mono font-bold text-stone-900">{p.value}{p.unit || ''}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Score explainability (inline, light)
-// ----------------------------------------------------------------
-function ScoreBreakdownPanel({ score, riskLevel, breakdown }) {
-  if (!breakdown || breakdown.length === 0) return null;
-  return (
-    <div className="fs-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Prototype Priority Score</div>
-          <div className="text-[11px] text-stone-400 mt-0.5">Explainable factor breakdown</div>
-        </div>
-        <div className="text-right">
-          <div className="font-mono font-black text-2xl text-stone-900">{score}<span className="text-sm text-stone-400 font-normal">/100</span></div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-            riskLevel === 'Critical' ? 'bg-red-100 text-red-700 border border-red-200' :
-            riskLevel === 'High' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-            riskLevel === 'Medium' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
-            'bg-green-100 text-green-700 border border-green-200'
-          }`}>{riskLevel} Risk</span>
-        </div>
-      </div>
-      <div className="space-y-2.5">
-        {breakdown.map((item, i) => (
-          <div key={i}>
-            <div className="flex items-center justify-between text-[11px] mb-1">
-              <span className="font-medium text-stone-700">{item.factor}</span>
-              <span className="font-mono font-bold text-stone-900">+{item.points}<span className="text-stone-400 font-normal text-[10px]">/{item.max_points} pts</span></span>
-            </div>
-            <div className="text-[10px] text-stone-400 mb-1">{item.description}</div>
-            <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
-              <div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${(item.points / item.max_points) * 100}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 pt-3 border-t border-stone-100 flex items-start gap-1.5 text-[10px] text-stone-400">
-        <Info size={10} className="mt-0.5 shrink-0 text-blue-500" />
-        AI decision support only. Officials perform field inspections and make all legal determinations.
-      </div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------
-// Main SatelliteAnalysisTab
-// ----------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function SatelliteAnalysisTab({
   parcels,
-  initialParcel,
+  selectedParcelId,
+  onSelectParcel,
   onRecordAction,
   onTriggerRecheck,
 }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedParcel, setSelectedParcel] = useState(initialParcel || null);
   const [selectedYear, setSelectedYear] = useState(2026);
-  const [showSearch, setShowSearch] = useState(false);
-  const [showChangeMask, setShowChangeMask] = useState(true);
-  const [isRechecking, setIsRechecking] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [layerMode, setLayerMode] = useState('TRUE COLOR');
+  const [hoverYear, setHoverYear] = useState(null);
+  
+  const [mapOptions, setMapOptions] = useState({
+    showParcel: true,
+    showPrev: true,
+    showBuilt: true,
+    showRoads: true,
+    showVeg: true
+  });
 
-  const YEARS = [2024, 2025, 2026, 2027];
+  const selectedParcel = useMemo(() => {
+    if (!selectedParcelId) return null;
+    return parcels.find(p => p.parcel_id === selectedParcelId);
+  }, [parcels, selectedParcelId]);
 
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim() || searchQuery.length < 2) return [];
-    const q = searchQuery.toLowerCase();
-    return parcels.filter(p =>
-      p.parcel_id?.toLowerCase().includes(q) ||
-      p.district?.toLowerCase().includes(q) ||
-      p.ward?.toLowerCase().includes(q)
-    ).slice(0, 6);
-  }, [parcels, searchQuery]);
+  // Play animation effect
+  useEffect(() => {
+    if (!isPlaying) return;
+    let currentIdx = YEARS.indexOf(selectedYear);
+    const interval = setInterval(() => {
+      currentIdx = (currentIdx + 1) % YEARS.length;
+      setSelectedYear(YEARS[currentIdx]);
+      if (currentIdx === YEARS.length - 1) {
+        setIsPlaying(false);
+      }
+    }, 1500); // 1.5s per transition
+    return () => clearInterval(interval);
+  }, [isPlaying, selectedYear]);
 
-  const handleSelectParcel = useCallback((p) => {
-    setSelectedParcel(p);
-    setSelectedYear(2026);
-    setSearchQuery('');
-    setShowSearch(false);
-  }, []);
+  if (!selectedParcel) {
+    return (
+      <div className="h-full flex items-center justify-center bg-stone-50 text-stone-900">
+        <div className="text-center">
+          <Search size={32} className="mx-auto text-stone-300 mb-3" />
+          <p className="text-stone-500 text-sm">Select a parcel to view satellite analysis.</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Chart data
-  const growthChartData = useMemo(() => {
-    if (!selectedParcel) return [];
-    return Object.entries(selectedParcel.history)
-      .filter(([yr]) => !isNaN(Number(yr)))
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([yr, val]) => ({
-        year: yr,
-        area: val,
-        label: `${yr}`,
-      }));
-  }, [selectedParcel]);
+  const activeYear = hoverYear || selectedYear;
+  const isProj = activeYear === 2027;
+  const activeIdx = YEARS.indexOf(activeYear);
+  const prevYear = activeIdx > 0 ? YEARS[activeIdx - 1] : null;
 
-  const scoreChartData = useMemo(() => {
-    if (!selectedParcel?.score_history) return [];
-    return Object.entries(selectedParcel.score_history)
-      .filter(([yr]) => !isNaN(Number(yr)))
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([yr, sc]) => ({ year: yr, score: sc }));
-  }, [selectedParcel]);
+  const heroData = selectedParcel.is_hero ? HERO_YEAR_DATA[activeYear] : null;
+  const area = heroData ? heroData.area : (selectedParcel.history?.[String(activeYear)] ?? 0);
+  const baseArea = selectedParcel.is_hero ? HERO_YEAR_DATA[2024].area : (selectedParcel.history?.['2024'] ?? 0);
+  const prevArea = prevYear ? (selectedParcel.is_hero ? HERO_YEAR_DATA[prevYear].area : (selectedParcel.history?.[String(prevYear)] ?? 0)) : area;
+  const netGrowth = area - baseArea;
+  const growthPct = baseArea > 0 ? ((netGrowth / baseArea) * 100).toFixed(0) : 0;
+  
+  const score = heroData ? heroData.score : (selectedParcel.score_history?.[String(activeYear)] ?? selectedParcel.urgency_score);
+  const traj = heroData ? heroData.traj : selectedParcel.trajectory;
+  const risk = heroData ? heroData.risk : selectedParcel.risk_level;
 
-  const currentArea = selectedParcel?.history?.[String(selectedYear)] ?? selectedParcel?.history?.['2026'] ?? 0;
-  const baselineArea = selectedParcel?.history?.['2024'] ?? 0;
-  const latestArea = selectedParcel?.history?.['2026'] ?? 0;
-  const netGrowth = latestArea - baselineArea;
-  const growthPct = baselineArea > 0 ? ((netGrowth / baselineArea) * 100).toFixed(0) : '—';
+  const chartData = YEARS.map(yr => ({
+    year: yr,
+    builtup: selectedParcel.is_hero ? HERO_YEAR_DATA[yr].area : (selectedParcel.history?.[yr] ?? 0)
+  }));
 
-  const hasYear = (yr) => selectedParcel?.history?.[String(yr)] !== undefined;
-  const canShowRecheck = selectedParcel && !hasYear(2027) && selectedParcel.status === 'Notice Issued';
-
-  const handleRecheck = async () => {
-    if (!selectedParcel) return;
-    setIsRechecking(true);
-    const updated = await onTriggerRecheck(selectedParcel.id, 1150.0);
-    if (updated) {
-      setSelectedParcel(updated);
-      setSelectedYear(2027);
-    }
-    setIsRechecking(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const handleSimulateRecheck = async () => {
+    setIsSimulating(true);
+    await onTriggerRecheck(selectedParcel.id, 1150.0);
+    setIsSimulating(false);
+    setSelectedYear(2027);
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-stone-50">
-      <div className="max-w-[1400px] mx-auto px-5 py-5 space-y-5">
+    <div className="flex h-full bg-stone-950 text-stone-300 overflow-hidden font-sans">
+      
+      {/* ── LEFT: Main Visualization ── */}
+      <div className="flex-1 flex flex-col relative border-r border-stone-800">
+        
+        {/* Search Bar */}
+        <div className="absolute top-4 left-4 z-30">
+          <MapSearchBar parcels={parcels} onSelectParcel={onSelectParcel} />
+        </div>
 
-        {/* Page header + search */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-bold text-stone-900">Satellite Change Analysis</h2>
-            <p className="text-[12px] text-stone-500 mt-0.5">
-              Multi-temporal Earth Observation — Built-up Change & Trajectory Analysis
-            </p>
-          </div>
+        {/* Layer Controls */}
+        <div className="absolute top-16 left-4 z-20 flex gap-1 bg-stone-900/80 backdrop-blur border border-stone-800 p-1 rounded-lg shadow-xl">
+          {['TRUE COLOR', 'FALSE COLOR', 'CHANGE', 'BUILT-UP'].map(mode => (
+            <button
+              key={mode}
+              onClick={() => setLayerMode(mode)}
+              className={`px-3 py-1.5 text-[10px] font-bold tracking-wider rounded transition-colors ${
+                layerMode === mode 
+                  ? 'bg-blue-600 text-white shadow-inner' 
+                  : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
 
-          {/* Parcel search */}
-          <div className="relative w-72">
-            <div className={`flex items-center bg-white border rounded-lg shadow-sm transition-all ${showSearch ? 'border-blue-400 shadow-blue-100' : 'border-stone-300'}`}>
-              <Search size={14} className="ml-3 text-stone-400 shrink-0" />
-              <input
-                type="text"
-                id="satellite-parcel-search"
-                value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setShowSearch(true); }}
-                onFocus={() => setShowSearch(true)}
-                onBlur={() => setTimeout(() => setShowSearch(false), 180)}
-                placeholder="Search parcel for analysis…"
-                className="w-full px-2.5 py-2 text-[12px] text-stone-800 placeholder-stone-400 bg-transparent outline-none"
+        {/* Visibility Toggles */}
+        <div className="absolute top-28 left-4 z-20 flex flex-col gap-1 bg-stone-900/80 backdrop-blur border border-stone-800 p-2 rounded-lg shadow-xl">
+          {Object.entries({
+            showParcel: 'Parcel Boundary',
+            showPrev: 'Previous Footprint',
+            showBuilt: 'Built-up Footprint',
+            showRoads: 'Roads',
+            showVeg: 'Vegetation'
+          }).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-2 text-[10px] text-stone-400 hover:text-stone-200 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={mapOptions[key]} 
+                onChange={(e) => setMapOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                className="accent-blue-600 w-3 h-3"
               />
-            </div>
-            {showSearch && searchResults.length > 0 && (
-              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-stone-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                {searchResults.map(p => (
-                  <button
-                    key={p.id}
-                    onMouseDown={() => handleSelectParcel(p)}
-                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-stone-50 border-b border-stone-100 last:border-0 text-left"
-                  >
-                    <MapPin size={12} className="text-stone-400 shrink-0" />
-                    <div>
-                      <div className="font-mono font-semibold text-[12px] text-stone-900">{p.parcel_id}</div>
-                      <div className="text-[10px] text-stone-400">{p.ward} · {p.district}</div>
-                    </div>
-                    <span className="ml-auto font-mono text-[11px] font-bold text-stone-600">{p.urgency_score}/100</span>
-                  </button>
-                ))}
+              {label}
+            </label>
+          ))}
+        </div>
+
+        {/* The 3D Map */}
+        <div className="flex-1 relative">
+          <IsometricMap 
+            parcel={selectedParcel} 
+            year={activeYear} 
+            prevYear={prevYear} 
+            layerMode={layerMode}
+            options={mapOptions}
+          />
+          
+          {/* Overlay Data on Map */}
+          <div className="absolute top-4 right-4 z-20 bg-stone-900/90 backdrop-blur-md border border-stone-700 p-4 rounded-xl shadow-2xl min-w-[220px]">
+            <div className="font-mono font-bold text-white text-lg">{selectedParcel.parcel_id}</div>
+            <div className="text-[10px] text-stone-400 uppercase tracking-widest mb-3">{selectedParcel.land_category}</div>
+            
+            <div className="space-y-2">
+              <div className="flex justify-between items-baseline border-b border-stone-800 pb-2">
+                <span className="text-[11px] text-stone-400 uppercase">Built-up</span>
+                <span className="font-mono text-xl text-stone-100 font-bold">{area} <span className="text-sm text-stone-500">m²</span></span>
               </div>
-            )}
+              {area > prevArea && prevArea > 0 && (
+                <div className="flex justify-between items-baseline border-b border-stone-800 pb-2">
+                  <span className="text-[11px] text-stone-400 uppercase">{isProj ? 'Projected Add' : 'New Change'}</span>
+                  <span className="font-mono text-sm text-amber-500 font-bold">+{area - prevArea} m²</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline">
+                <span className="text-[11px] text-stone-400 uppercase">Total Growth</span>
+                <span className="font-mono text-sm text-rose-500 font-bold">+{growthPct}%</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-stone-800 flex items-center justify-between">
+              <span className={`text-[11px] font-bold px-2 py-1 rounded bg-stone-800 ${
+                traj.includes('Fast') ? 'text-rose-400' : traj === 'Growing' ? 'text-amber-400' : 'text-stone-300'
+              }`}>
+                {traj}
+              </span>
+              <span className="font-mono text-sm font-bold text-rose-400">{score}<span className="text-[10px] text-stone-500">/100</span></span>
+            </div>
           </div>
         </div>
 
-        {/* Selected parcel headline */}
-        {selectedParcel ? (
-          <>
-            <div className="flex items-center gap-3 pb-1 border-b border-stone-200">
-              <span className="font-mono font-bold text-stone-900">{selectedParcel.parcel_id}</span>
-              <span className="text-stone-400">—</span>
-              <span className="text-stone-600 text-[13px]">{selectedParcel.ward}, {selectedParcel.district}</span>
-              <span className="text-stone-400">·</span>
-              <span className="text-[12px] text-stone-500">{selectedParcel.land_category}</span>
-              {selectedParcel.is_hero && (
-                <span className="text-[9px] font-bold bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded uppercase ml-1">
-                  Hero Demo
-                </span>
-              )}
-            </div>
-
-            {/* Re-check warning */}
-            {(selectedParcel.status === 'Re-check Required' || selectedParcel.post_notice_growth) && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 flex items-start gap-3">
-                <AlertTriangle size={16} className="text-rose-600 mt-0.5 shrink-0" />
-                <div>
-                  <div className="font-semibold text-rose-800 text-[13px]">Continued Growth Detected After Intervention</div>
-                  <div className="text-[12px] text-rose-600 mt-0.5">
-                    Built-up area expanded from {latestArea} m² (2026) to {selectedParcel.history?.['2027'] ?? '—'} m² (2027) despite notice issued on {selectedParcel.notice_date}. Status escalated to <strong>Re-check Required</strong>.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Main 2-column layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-              {/* LEFT — imagery + timeline */}
-              <div className="lg:col-span-2 space-y-4">
-
-                {/* Time slider */}
-                <div className="fs-card p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Observation Timeline</div>
-                    <div className="font-mono text-[12px] font-bold text-stone-800">
-                      Epoch: <span className="text-blue-700">{selectedYear}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        const idx = YEARS.indexOf(selectedYear);
-                        if (idx > 0) setSelectedYear(YEARS[idx - 1]);
-                      }}
-                      disabled={YEARS.indexOf(selectedYear) === 0}
-                      className="p-1.5 rounded border border-stone-200 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    <div className="flex-1 grid grid-cols-4 gap-2">
-                      {YEARS.map(yr => {
-                        const active = yr === selectedYear;
-                        const hasData = hasYear(yr);
-                        const isSim = yr === 2027;
-                        return (
-                          <button
-                            key={yr}
-                            onClick={() => hasData && setSelectedYear(yr)}
-                            disabled={!hasData}
-                            className={`py-2 px-3 rounded-md border text-center transition-colors ${
-                              active ? (isSim
-                                ? 'bg-rose-700 text-white border-rose-800'
-                                : 'bg-blue-700 text-white border-blue-800')
-                              : hasData ? 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
-                              : 'bg-stone-50 border-stone-100 text-stone-300 cursor-not-allowed'
-                            }`}
-                          >
-                            <div className="font-mono font-bold text-[14px]">{yr}</div>
-                            <div className={`text-[9px] mt-0.5 ${active ? 'opacity-80' : 'text-stone-400'}`}>
-                              {yr === 2024 ? 'Baseline'
-                                : yr === 2025 ? 'Scan 1'
-                                : yr === 2026 ? 'Current'
-                                : 'Re-check'}
-                            </div>
-                            {isSim && (
-                              <div className={`text-[8px] mt-0.5 font-semibold ${active ? 'text-rose-200' : 'text-rose-500'}`}>
-                                {hasData ? 'SIM' : 'NOT YET'}
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      onClick={() => {
-                        const idx = YEARS.indexOf(selectedYear);
-                        const next = YEARS[idx + 1];
-                        if (next && hasYear(next)) setSelectedYear(next);
-                      }}
-                      disabled={YEARS.indexOf(selectedYear) >= YEARS.length - 1 || !hasYear(YEARS[YEARS.indexOf(selectedYear) + 1])}
-                      className="p-1.5 rounded border border-stone-200 hover:bg-stone-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Before / After imagery */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-2">Before — 2024 Baseline</div>
-                    <SatelliteImageryPanel parcel={selectedParcel} year={2024} isCurrentYear={false} />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                      Current — {selectedYear} Observation
-                      <label className="flex items-center gap-1 font-normal normal-case cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={showChangeMask}
-                          onChange={e => setShowChangeMask(e.target.checked)}
-                          className="rounded border-stone-300 accent-blue-600 w-3 h-3"
-                        />
-                        <span className="text-stone-400 text-[10px]">Change overlay</span>
-                      </label>
-                    </div>
-                    <SatelliteImageryPanel parcel={selectedParcel} year={selectedYear} isCurrentYear={true} />
-                  </div>
-                </div>
-
-                {/* Change metrics strip */}
-                <div className="fs-card p-4">
-                  <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-3">Temporal Growth Metrics</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <div className="text-[10px] text-stone-400">2024 Baseline</div>
-                      <div className="font-mono font-bold text-stone-900">{baselineArea} m²</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-stone-400">2026 Changed Area</div>
-                      <div className="font-mono font-bold text-stone-900">{latestArea} m²</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-stone-400">Net Growth</div>
-                      <div className={`font-mono font-bold ${netGrowth > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                        {netGrowth > 0 ? '+' : ''}{netGrowth} m²
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-stone-400">Growth %</div>
-                      <div className={`font-mono font-bold ${netGrowth > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                        {growthPct !== '—' ? `${growthPct}%` : '—'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Growth chart */}
-                <div className="fs-card p-4">
-                  <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">Built-up Area vs Year</div>
-                  <div className="text-[10px] text-stone-400 mb-3">Derived from multi-temporal spectral indices (prototype synthetic data)</div>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={growthChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#2563eb" stopOpacity={0.2} />
-                            <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ebe8e2" />
-                        <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: '#78716c' }} axisLine={false} tickLine={false} unit=" m²" width={55} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Area type="monotone" dataKey="area" stroke="#2563eb" strokeWidth={2} fill="url(#areaGradient)" dot={{ r: 4, fill: '#2563eb', stroke: '#fff', strokeWidth: 2 }} name="Built-up Area" unit=" m²" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT — score + history */}
-              <div className="space-y-4">
-
-                {/* Risk score evolution chart */}
-                <div className="fs-card p-4">
-                  <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">Priority Score Over Time</div>
-                  <div className="text-[10px] text-stone-400 mb-3">Risk escalation trajectory</div>
-                  <div className="h-36">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={scoreChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ebe8e2" />
-                        <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#78716c' }} axisLine={false} tickLine={false} />
-                        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#78716c' }} axisLine={false} tickLine={false} width={28} />
-                        <Tooltip content={<ChartTooltip />} />
-                        <Line type="monotone" dataKey="score" stroke="#dc2626" strokeWidth={2} dot={{ r: 4, fill: '#dc2626', stroke: '#fff', strokeWidth: 2 }} name="Priority Score" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Score breakdown */}
-                <ScoreBreakdownPanel
-                  score={selectedParcel.urgency_score}
-                  riskLevel={selectedParcel.risk_level}
-                  breakdown={selectedParcel.score_breakdown}
-                />
-
-                {/* Case timeline */}
-                <div className="fs-card p-4">
-                  <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-3 flex items-center gap-1">
-                    <Clock size={11} />
-                    Case History
-                  </div>
-                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                    {selectedParcel.audit_trail && [...selectedParcel.audit_trail].reverse().map((log, i) => (
-                      <div key={i} className="flex items-start gap-2.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-stone-300 mt-1.5 shrink-0" />
-                        <div>
-                          <div className="font-mono text-[10px] text-stone-400">{log.timestamp}</div>
-                          <div className="text-[11px] text-stone-700 leading-snug mt-0.5">{log.event}</div>
-                          <div className="text-[10px] text-stone-400 mt-0.5">{log.actor}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Simulate re-check */}
-                {canShowRecheck && (
-                  <div className="fs-card p-4 border-rose-200">
-                    <div className="text-[11px] font-semibold text-stone-600 mb-2">
-                      2027 Post-Notice Simulation
-                    </div>
-                    <p className="text-[11px] text-stone-500 mb-3 leading-relaxed">
-                      Simulate the next satellite observation after notice was issued. If growth continues, status escalates to <strong>Re-check Required</strong>.
-                    </p>
-                    <button
-                      onClick={handleRecheck}
-                      disabled={isRechecking}
-                      className="w-full flex items-center justify-center gap-2 border border-rose-300 text-rose-700 hover:bg-rose-50 text-[12px] font-semibold py-2 rounded-md transition-colors"
-                    >
-                      <RotateCcw size={13} />
-                      {isRechecking ? 'Simulating 2027 Scan…' : 'Simulate 2027 Re-check (1,150 m²)'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        ) : (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center mb-4">
-              <Search size={24} className="text-stone-400" />
-            </div>
-            <h3 className="font-semibold text-stone-700 mb-2">No parcel selected</h3>
-            <p className="text-[13px] text-stone-400 max-w-xs">
-              Search for a parcel above, or click any parcel on the Overview map and then select "View Satellite Analysis".
-            </p>
-            <button
-              onClick={() => handleSelectParcel(parcels.find(p => p.parcel_id === 'PL-4587') || parcels[0])}
-              className="mt-4 text-[12px] text-blue-600 hover:underline font-medium"
+        {/* Temporal Scrubber */}
+        <div className="h-24 bg-stone-900 border-t border-stone-800 flex flex-col justify-center px-6">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 flex items-center justify-center text-white shadow-lg transition-colors shrink-0"
             >
-              Load hero parcel PL-4587 →
+              {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-1" />}
             </button>
+            
+            <div className="flex-1 flex justify-between relative px-4">
+              {/* Line behind */}
+              <div className="absolute top-1/2 left-8 right-8 h-1 bg-stone-800 -translate-y-1/2" />
+              
+              {YEARS.map(yr => {
+                const isActive = activeYear === yr;
+                const isScenario = yr === 2027;
+                return (
+                  <div key={yr} className="relative z-10 flex flex-col items-center group cursor-pointer" onClick={() => setSelectedYear(yr)}>
+                    <div className="text-[10px] font-bold text-stone-500 mb-2 uppercase tracking-wider h-4">
+                      {yr === 2024 ? 'Baseline' : yr === 2025 ? 'Observation' : yr === 2026 ? 'Latest' : 'Projected'}
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border-2 transition-all ${
+                      isActive 
+                        ? (isScenario ? 'bg-rose-500 border-rose-300 scale-125 shadow-[0_0_10px_rgba(244,63,94,0.5)]' : 'bg-blue-500 border-blue-300 scale-125 shadow-[0_0_10px_rgba(59,130,246,0.5)]')
+                        : 'bg-stone-900 border-stone-600 group-hover:border-stone-400'
+                    }`} />
+                    <div className={`mt-2 font-mono text-sm transition-colors ${
+                      isActive ? (isScenario ? 'text-rose-400 font-bold' : 'text-blue-400 font-bold') : 'text-stone-400'
+                    }`}>
+                      {yr}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* ── RIGHT: Data & Signals Panel ── */}
+      <div className="w-80 bg-stone-950 flex flex-col overflow-y-auto custom-scrollbar border-l border-stone-900 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-30">
+        
+        {/* Priority Score Header */}
+        <div className="p-5 border-b border-stone-800 bg-stone-900/50">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Priority Index</div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-4xl font-black text-rose-500">{score}</span>
+                <span className="font-mono text-sm text-stone-600">/100</span>
+              </div>
+            </div>
+            <div className="px-2 py-1 rounded border border-rose-900/50 bg-rose-950/30 text-rose-500 text-[10px] font-bold uppercase">
+              {risk} Risk
+            </div>
+          </div>
+          
+          {/* Breakdown bars */}
+          <div className="space-y-2 mt-4">
+            {[
+              { label: 'Growth Velocity', val: 25, max: 30 },
+              { label: 'Recent Change', val: 20, max: 20 },
+              { label: 'Accumulated Built-up', val: 12, max: 15 },
+              { label: 'Temporal Persistence', val: 15, max: 15 },
+              { label: 'Post-Notice Risk', val: isProj ? 20 : 13, max: 20 },
+            ].map((item, i) => (
+              <div key={i} className="flex flex-col gap-1">
+                <div className="flex justify-between text-[9px] text-stone-400 uppercase">
+                  <span>{item.label}</span>
+                  <span className="font-mono text-stone-300">{item.val}/{item.max}</span>
+                </div>
+                <div className="w-full h-1 bg-stone-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-stone-500 transition-all duration-500" style={{ width: `${(item.val/item.max)*100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Prototype EO Signals */}
+        <div className="p-5 border-b border-stone-800">
+          <div className="flex items-center gap-2 mb-4">
+            <Layers size={14} className="text-stone-500" />
+            <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Prototype EO Signals</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-stone-900 p-3 rounded border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-bold mb-1">NDBI</div>
+              <div className="text-[11px] text-stone-300 leading-snug">Built-up signal <span className="text-rose-400 font-bold block mt-1">↑ Significant</span></div>
+            </div>
+            <div className="bg-stone-900 p-3 rounded border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-bold mb-1">NDVI</div>
+              <div className="text-[11px] text-stone-300 leading-snug">Vegetation signal <span className="text-amber-500 font-bold block mt-1">↓ Declining</span></div>
+            </div>
+            <div className="bg-stone-900 p-3 rounded border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-bold mb-1">PERSISTENCE</div>
+              <div className="text-[11px] text-stone-300 font-bold mt-1">3 consecutive obs.</div>
+            </div>
+            <div className="bg-stone-900 p-3 rounded border border-stone-800">
+              <div className="text-[10px] text-stone-500 font-bold mb-1">CONSISTENCY</div>
+              <div className="text-[11px] text-emerald-400 font-bold mt-1">High Spatial Match</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Built-up Area Graph (Interactive) */}
+        <div className="p-5 flex-1 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp size={14} className="text-stone-500" />
+            <h3 className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">Temporal Growth Curve</h3>
+          </div>
+          <div className="text-[10px] text-stone-500 mb-4">Hover graph to highlight footprint on map</div>
+          
+          <div className="flex-1 w-full min-h-[150px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart 
+                data={chartData} 
+                onMouseMove={(e) => {
+                  if (e.activeTooltipIndex !== undefined) {
+                    setHoverYear(YEARS[e.activeTooltipIndex]);
+                  }
+                }}
+                onMouseLeave={() => setHoverYear(null)}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#292524" vertical={false} />
+                <XAxis dataKey="year" stroke="#57534e" tick={{ fontSize: 10, fill: '#78716c' }} axisLine={false} tickLine={false} />
+                <YAxis stroke="#57534e" tick={{ fontSize: 10, fill: '#78716c', fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1c1917', borderColor: '#292524', borderRadius: '4px', color: '#fff', fontSize: '11px', fontFamily: 'monospace' }}
+                  itemStyle={{ color: '#60a5fa' }}
+                />
+                <ReferenceLine x={2026} stroke="#f43f5e" strokeDasharray="3 3" />
+                <Area type="monotone" dataKey="builtup" name="Built-up Area (m²)" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorArea)" activeDot={{ r: 6, fill: '#60a5fa', stroke: '#1c1917', strokeWidth: 2 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Re-check Action */}
+          {selectedParcel.status === 'Notice Issued' && !selectedParcel.history?.['2027'] && (
+            <div className="mt-4 p-3 bg-rose-950/30 border border-rose-900/50 rounded-lg">
+              <div className="text-[11px] text-rose-300 font-bold mb-2">Notice Issued 2026-06-15</div>
+              <button
+                onClick={handleSimulateRecheck}
+                disabled={isSimulating}
+                className="w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold py-2 rounded transition-colors disabled:opacity-50"
+              >
+                <RotateCcw size={14} />
+                {isSimulating ? 'Simulating 2027 Scenario...' : 'Simulate 2027 Scenario (1,150 m²)'}
+              </button>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

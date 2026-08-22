@@ -8,7 +8,7 @@ const TABS = [
   { id: 'activity',   label: 'Activity',           icon: Activity },
 ];
 
-export default function AppHeader({ activeTab, onTabChange, stats, locationContext }) {
+export default function AppHeader({ activeTab, onTabChange, stats, locationContext, onOpenPipeline }) {
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
       {/* Top bar: Logo + Location + User */}
@@ -85,7 +85,7 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
       </div>
 
       {/* Tab navigation */}
-      <nav className="px-5 flex items-center gap-0">
+      <nav className="px-5 flex items-center gap-0 w-full">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -105,6 +105,14 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
             </button>
           );
         })}
+        {onOpenPipeline && (
+          <button
+            onClick={onOpenPipeline}
+            className="ml-auto mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-800 transition-colors border border-blue-200 bg-blue-50/50 hover:bg-blue-50 px-2.5 py-1 rounded"
+          >
+            ⚙ How it Works
+          </button>
+        )}
       </nav>
     </header>
   );

@@ -2,15 +2,23 @@
 ForeSite Seed Data Generator - Institutional GIS Edition
 
 Generates a realistic administrative ward land parcel dataset (~1,000 government parcels with a contiguous demo ward cluster of 15-20 parcels in Dwarka Zone 3, South West Delhi).
-Includes ownership, ward designation, 3D built-up density factors, and multi-year risk score trajectories.
+Includes ownership, ward designation, 3D built-up density factors, multi-year risk score trajectories, spectral indices (NDVI/NDBI/NDWI), and detection confidence.
 """
 
 import random
+import math
 from typing import List, Dict, Any
+
+from ml.change_detection import (
+    simulate_spectral_bands,
+    compute_spectral_indices,
+    compute_detection_confidence,
+    generate_change_mask
+)
 
 REGIONS = [
     {"state": "Delhi NCR", "district": "South West Delhi", "wards": ["Dwarka Zone 3", "Najafgarh Ward 12", "Vasant Kunj Ward 4"], "lat": 28.5833, "lng": 77.0667, "owner": "Delhi Development Authority (DDA)"},
-    {"state": "Delhi NCR", "district": "North West Delhi", "wards": ["Rohini Zone 7", "Pitampura Ward 2"], "lat": 28.6900, "lng": 77.1400, "owner": "Municipal Corporation of Delhi (MCD)"},
+    {"state": "Delhi NCR", "district": "North West Delhi", "wards": ["Rohini Zone 7", "Pitampura Ward 2"], "lat": 28.6900, "lng": 77.1400, "owner": "Municipal Corporation of MCD"},
     {"state": "Maharashtra", "district": "Pune", "wards": ["Baner Ward 8", "Kothrud Zone 4", "Hinjawadi Ward 1"], "lat": 18.5204, "lng": 73.8567, "owner": "Pune Municipal Corporation (PMC)"},
     {"state": "Karnataka", "district": "Bengaluru Urban", "wards": ["Whitefield Ward 84", "Koramangala Zone 2"], "lat": 12.9716, "lng": 77.5946, "owner": "Bruhat Bengaluru Mahanagara Palike (BBMP)"},
     {"state": "Uttar Pradesh", "district": "Gautam Buddha Nagar", "wards": ["Noida Sector 62", "Greater Noida Zone 1"], "lat": 28.5355, "lng": 77.3910, "owner": "NOIDA Authority"},
@@ -44,6 +52,22 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
 
     # 1. Hero Parcel PL-4587 (Dwarka Zone 3, South West Delhi)
     hero_lat, hero_lng = 28.5833, 77.0667
+    hero_area_sqm = 15400.0
+    hero_hist = {
+        "2024": 120.0,
+        "2025": 480.0,
+        "2026": 920.0,
+        "2027": 1150.0
+    }
+    
+    # Pre-simulate spectral indices for hero parcel
+    hero_spectral = {}
+    for y_str, area in hero_hist.items():
+        bands = simulate_spectral_bands(area, hero_area_sqm, int(y_str))
+        hero_spectral[y_str] = compute_spectral_indices(bands)
+        
+    hero_mask = generate_change_mask(hero_lat, hero_lng, 920.0 - 120.0, [], 4587)
+
     hero_parcel = {
         "id": "PL-4587",
         "parcel_id": "PL-4587",
@@ -54,14 +78,9 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
         "ownership": "Delhi Development Authority (DDA)",
         "latitude": hero_lat,
         "longitude": hero_lng,
-        "area_sqm": 15400.0,
+        "area_sqm": hero_area_sqm,
         "polygon": generate_polygon_at(hero_lat, hero_lng, 0.0022, 0.0016),
-        "history": {
-            "2024": 120.0,
-            "2025": 480.0,
-            "2026": 920.0,
-            "2027": 1150.0
-        },
+        "history": hero_hist,
         "score_history": {
             "2024": 32,
             "2025": 58,
@@ -75,6 +94,12 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
         "last_checked": "2026-08-20",
         "post_notice_growth": True,
         "is_hero": True,
+        "spectral": hero_spectral,
+        "detection_confidence": 91,
+        "is_false_positive": False,
+        "false_positive_reason": None,
+        "verification_outcome": None,
+        "change_mask": hero_mask,
         "audit_trail": [
             {"timestamp": "2024-04-15", "event": "Baseline satellite imagery ingested (120 m² change)", "actor": "Automated Satellite Pipeline"},
             {"timestamp": "2025-04-18", "event": "Intermediate expansion detected (+360 m² built-up)", "actor": "ForeSite Change Engine"},
@@ -95,19 +120,20 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
     ]
 
     hero_cases = [
-        {"id": "PL-2134", "cat": "Forest Buffer Zone", "h": {"2024": 180, "2025": 520, "2026": 880, "2027": 1100}, "st": "Notice Issued", "png": True, "score": 87},
-        {"id": "PL-7821", "cat": "Irrigation & Riverbed Lands", "h": {"2024": 90, "2025": 380, "2026": 790}, "st": "Inspection Scheduled", "png": False, "score": 81},
-        {"id": "PL-1102", "cat": "Municipal Reserve Land", "h": {"2024": 50, "2025": 210, "2026": 640}, "st": "Under Review", "png": False, "score": 68},
-        {"id": "PL-9034", "cat": "Transport Corridor Buffer", "h": {"2024": 200, "2025": 610, "2026": 1050, "2027": 1380}, "st": "Re-check Required", "png": True, "score": 92},
-        {"id": "PL-3311", "cat": "Public Parks & Green Belt", "h": {"2024": 0, "2025": 310, "2026": 720}, "st": "New Alert", "png": False, "score": 74},
-        {"id": "PL-6620", "cat": "Municipal Reserve Land", "h": {"2024": 40, "2025": 390, "2026": 810, "2027": 1020}, "st": "Re-check Required", "png": True, "score": 90},
-        {"id": "PL-5412", "cat": "Institutional Education Zone", "h": {"2024": 150, "2025": 200, "2026": 210}, "st": "Resolved", "png": False, "score": 28},
+        {"id": "PL-2134", "cat": "Forest Buffer Zone", "h": {"2024": 180, "2025": 520, "2026": 880, "2027": 1100}, "st": "Notice Issued", "png": True, "score": 87, "conf": 93, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-7821", "cat": "Irrigation & Riverbed Lands", "h": {"2024": 90, "2025": 380, "2026": 790}, "st": "Inspection Scheduled", "png": False, "score": 81, "conf": 89, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-1102", "cat": "Municipal Reserve Land", "h": {"2024": 50, "2025": 210, "2026": 640}, "st": "Under Review", "png": False, "score": 68, "conf": 85, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-9034", "cat": "Transport Corridor Buffer", "h": {"2024": 200, "2025": 610, "2026": 1050, "2027": 1380}, "st": "Re-check Required", "png": True, "score": 92, "conf": 96, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-3311", "cat": "Public Parks & Green Belt", "h": {"2024": 0, "2025": 310, "2026": 720}, "st": "New Alert", "png": False, "score": 74, "conf": 88, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-6620", "cat": "Municipal Reserve Land", "h": {"2024": 40, "2025": 390, "2026": 810, "2027": 1020}, "st": "Re-check Required", "png": True, "score": 90, "conf": 94, "is_fp": False, "fp_reason": None, "ver": None},
+        {"id": "PL-5412", "cat": "Institutional Education Zone", "h": {"2024": 150, "2025": 200, "2026": 210}, "st": "Resolved", "png": False, "score": 28, "conf": 76, "is_fp": False, "fp_reason": None, "ver": "Authorized Construction"},
     ]
 
     for idx, offset in enumerate(grid_offsets):
         p_lat = hero_lat + offset[0]
         p_lng = hero_lng + offset[1]
         
+        # Check if we should insert the custom case
         if idx < len(hero_cases):
             hc = hero_cases[idx]
             p_id = hc["id"]
@@ -116,6 +142,10 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
             st = hc["st"]
             png = hc["png"]
             sc = hc["score"]
+            conf = hc["conf"]
+            is_fp = hc["is_fp"]
+            fp_reason = hc["fp_reason"]
+            ver = hc["ver"]
         else:
             p_id = f"PL-10{idx:02d}"
             cat = random.choice(LAND_CATEGORIES)
@@ -126,6 +156,20 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
             st = "Resolved" if y26 < 60 else "New Alert"
             png = False
             sc = 22 if st == "Resolved" else 48
+            conf = random.randint(65, 82)
+            is_fp = False
+            fp_reason = None
+            ver = None
+
+        area_sqm = round(random.uniform(8000, 24000), 1)
+        
+        spectral_data = {}
+        for y_str, area in hist.items():
+            bands = simulate_spectral_bands(area, area_sqm, int(y_str))
+            spectral_data[y_str] = compute_spectral_indices(bands)
+            
+        change_magnitude = hist.get("2026", 0) - hist.get("2024", 0)
+        mask = generate_change_mask(p_lat, p_lng, change_magnitude, [], idx)
 
         parcels.append({
             "id": p_id,
@@ -137,7 +181,7 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
             "ownership": "Delhi Development Authority (DDA)",
             "latitude": round(p_lat, 5),
             "longitude": round(p_lng, 5),
-            "area_sqm": round(random.uniform(8000, 24000), 1),
+            "area_sqm": area_sqm,
             "polygon": generate_polygon_at(p_lat, p_lng, random.uniform(0.0016, 0.0024), random.uniform(0.0012, 0.0018)),
             "history": hist,
             "score_history": {
@@ -153,6 +197,12 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
             "last_checked": "2026-08-18",
             "post_notice_growth": png,
             "is_hero": False,
+            "spectral": spectral_data,
+            "detection_confidence": conf,
+            "is_false_positive": is_fp,
+            "false_positive_reason": fp_reason,
+            "verification_outcome": ver,
+            "change_mask": mask,
             "audit_trail": [
                 {"timestamp": "2024-04-10", "event": "Baseline observation ingested", "actor": "Automated Satellite Pipeline"},
                 {"timestamp": "2026-05-01", "event": f"Status classified as '{st}'", "actor": "ForeSite Monitor"}
@@ -175,33 +225,91 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
         lat = round(reg["lat"] + random.uniform(-0.12, 0.12), 5)
         lng = round(reg["lng"] + random.uniform(-0.12, 0.12), 5)
 
+        area_sqm = round(random.uniform(6000, 35000), 1)
+
         rand_p = random.random()
-        if rand_p < 0.70: # Stable
+        is_fp = False
+        fp_reason = None
+        ver = None
+        
+        # We classify into 5 scenarios
+        if rand_p < 0.70: # Cluster A: Stable (70%)
             y24 = round(random.uniform(0, 30), 1)
             y25 = round(y24 + random.uniform(0, 15), 1)
             y26 = round(y25 + random.uniform(0, 15), 1)
             hist = {"2024": y24, "2025": y25, "2026": y26}
             st = "Resolved"
             png = False
-            sc = random.randint(5, 30)
-        elif rand_p < 0.90: # Growing
+            sc = random.randint(5, 29)
+            conf = random.randint(12, 38)
+            
+        elif rand_p < 0.85: # Cluster B: Growing (15%)
             y24 = round(random.uniform(10, 80), 1)
-            y25 = round(y24 + random.uniform(60, 150), 1)
-            y26 = round(y25 + random.uniform(80, 220), 1)
+            y25 = round(y24 + random.uniform(65, 140), 1)
+            y26 = round(y25 + random.uniform(85, 200), 1)
             hist = {"2024": y24, "2025": y25, "2026": y26}
             st = random.choice(["New Alert", "Under Review", "Inspection Scheduled"])
             png = False
-            sc = random.randint(35, 65)
-        else: # Growing Fast
+            sc = random.randint(35, 64)
+            conf = random.randint(62, 81)
+            
+        elif rand_p < 0.93: # Cluster C: Growing Fast (8%)
             y24 = round(random.uniform(40, 150), 1)
-            y25 = round(y24 + random.uniform(180, 350), 1)
-            y26 = round(y25 + random.uniform(250, 500), 1)
+            y25 = round(y24 + random.uniform(180, 320), 1)
+            y26 = round(y25 + random.uniform(220, 450), 1)
             st = random.choice(["New Alert", "Notice Issued", "Re-check Required"])
             png = (st == "Re-check Required")
             hist = {"2024": y24, "2025": y25, "2026": y26}
             if png:
-                hist["2027"] = round(y26 + random.uniform(150, 300), 1)
-            sc = random.randint(70, 95)
+                hist["2027"] = round(y26 + random.uniform(120, 250), 1)
+            sc = random.randint(70, 94)
+            conf = random.randint(82, 97)
+            
+        elif rand_p < 0.98: # Cluster D: False Positives (5%)
+            # Vegetation seasonality or cloud artifact
+            y24 = round(random.uniform(10, 40), 1)
+            y25 = round(y24 + random.uniform(50, 120), 1)
+            y26 = round(y25 + random.uniform(60, 160), 1)
+            hist = {"2024": y24, "2025": y25, "2026": y26}
+            st = "Resolved"
+            png = False
+            is_fp = True
+            fp_reason = random.choice([
+                "Seasonal vegetation cycle", 
+                "Shadow artifact in imagery", 
+                "Temporary agricultural usage", 
+                "Cloud/haze interference"
+            ])
+            sc = random.randint(10, 24)
+            conf = random.randint(30, 55)
+            ver = "False Positive"
+            
+        else: # Cluster E: Road / Infrastructure (2%)
+            y24 = round(random.uniform(50, 120), 1)
+            y25 = round(y24 + random.uniform(150, 300), 1)
+            y26 = round(y25 + random.uniform(180, 350), 1)
+            hist = {"2024": y24, "2025": y25, "2026": y26}
+            st = "Resolved"
+            png = False
+            ver = "Authorized Construction"
+            sc = random.randint(15, 29)
+            conf = random.randint(80, 92)
+
+        spectral_data = {}
+        for y_str, area in hist.items():
+            # Force seasonal NDBI/NDVI drop for false positive vegetation
+            if is_fp and "vegetation" in fp_reason.lower():
+                spectral_data[y_str] = {
+                    "ndvi": round(0.65 - 0.35 * (1.0 if y_str == "2026" else 0.1), 3),
+                    "ndbi": round(0.12 + 0.05 * (area / area_sqm), 3),
+                    "ndwi": round(-0.35 + 0.05, 3)
+                }
+            else:
+                bands = simulate_spectral_bands(area, area_sqm, int(y_str))
+                spectral_data[y_str] = compute_spectral_indices(bands)
+                
+        change_magnitude = hist.get("2026", 0) - hist.get("2024", 0)
+        mask = generate_change_mask(lat, lng, change_magnitude, [], count_idx)
 
         parcels.append({
             "id": p_id,
@@ -213,7 +321,7 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
             "ownership": reg["owner"],
             "latitude": lat,
             "longitude": lng,
-            "area_sqm": round(random.uniform(6000, 35000), 1),
+            "area_sqm": area_sqm,
             "polygon": generate_polygon_at(lat, lng, random.uniform(0.0015, 0.0025), random.uniform(0.0012, 0.0018)),
             "history": hist,
             "score_history": {
@@ -222,15 +330,22 @@ def generate_seed_parcels(total_count: int = 1000) -> List[Dict[str, Any]]:
                 "2026": sc,
                 "2027": sc + 10 if png else sc
             },
-            "trajectory": "STABLE",
+            "trajectory": "STABLE" if sc < 30 else "GROWING FAST" if sc >= 70 else "GROWING",
             "urgency_score": sc,
             "status": st,
             "notice_date": "2026-05-15" if st in ["Notice Issued", "Re-check Required"] else None,
             "last_checked": "2026-08-18",
             "post_notice_growth": png,
             "is_hero": False,
+            "spectral": spectral_data,
+            "detection_confidence": conf,
+            "is_false_positive": is_fp,
+            "false_positive_reason": fp_reason,
+            "verification_outcome": ver,
+            "change_mask": mask,
             "audit_trail": [
-                {"timestamp": "2024-04-10", "event": "Baseline satellite record ingested", "actor": "Automated Satellite Pipeline"}
+                {"timestamp": "2024-04-10", "event": "Baseline satellite record ingested", "actor": "Automated Satellite Pipeline"},
+                {"timestamp": "2026-05-01", "event": f"Verification feedback logged: {ver}" if ver else f"Status updated to '{st}'", "actor": "ForeSite Monitor"}
             ]
         })
 

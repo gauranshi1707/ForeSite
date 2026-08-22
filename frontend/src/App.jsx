@@ -4,6 +4,7 @@ import OverviewTab from './components/OverviewTab';
 import SatelliteAnalysisTab from './components/SatelliteAnalysisTab';
 import PriorityAlertsTab from './components/PriorityAlertsTab';
 import ActivityTab from './components/ActivityTab';
+import SystemPipelineModal from './components/SystemPipelineModal';
 
 import {
   fetchStatistics,
@@ -23,6 +24,7 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [selectedParcel, setSelectedParcel] = useState(null);
   const [selectedYear, setSelectedYear] = useState(2026);
+  const [pipelineModalOpen, setPipelineModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -41,12 +43,15 @@ export default function App() {
       setParcels(parcelsRes);
       setAlerts(alertsRes);
 
-      // Re-sync selected parcel from fresh data
+      // Re-sync selected parcel from fresh data, or default to PL-4587
       if (selectedParcel) {
         const updated =
           parcelsRes.find(p => p.id === selectedParcel.id) ||
           alertsRes.find(p => p.id === selectedParcel.id);
         if (updated) setSelectedParcel(updated);
+      } else {
+        const defaultParcel = parcelsRes.find(p => p.parcel_id === 'PL-4587');
+        if (defaultParcel) setSelectedParcel(defaultParcel);
       }
     } catch (err) {
       console.error('ForeSite: Failed to load data:', err);
@@ -163,6 +168,7 @@ export default function App() {
         onTabChange={setActiveTab}
         stats={stats}
         locationContext={locationContext}
+        onOpenPipeline={() => setPipelineModalOpen(true)}
       />
 
       {/* Tab content — fills remaining height */}
@@ -174,6 +180,7 @@ export default function App() {
             selectedParcel={selectedParcel}
             onSelectParcel={handleSelectParcel}
             selectedYear={selectedYear}
+            setSelectedYear={setSelectedYear}
             stats={stats}
             onRecordAction={handleRecordAction}
             onTriggerRecheck={handleTriggerRecheck}
@@ -184,7 +191,8 @@ export default function App() {
         {activeTab === 'satellite' && (
           <SatelliteAnalysisTab
             parcels={parcels}
-            initialParcel={satelliteInitialParcel}
+            selectedParcelId={selectedParcel?.parcel_id}
+            onSelectParcel={handleSelectParcel}
             onRecordAction={handleRecordAction}
             onTriggerRecheck={handleTriggerRecheck}
           />
@@ -217,6 +225,10 @@ export default function App() {
           <span>Sentinel-2 / Earth Engine architecture ready</span>
         </div>
       </footer>
+
+      {pipelineModalOpen && (
+        <SystemPipelineModal onClose={() => setPipelineModalOpen(false)} />
+      )}
     </div>
   );
 }

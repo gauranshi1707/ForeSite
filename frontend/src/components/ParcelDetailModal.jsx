@@ -199,7 +199,7 @@ export default function ParcelDetailModal({
             <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-xl shadow-xl flex flex-col justify-between">
               <div>
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                  Built-Up Expansion vs Observation Year
+                  Built-Up Expansion over Time
                 </h3>
                 <p className="text-[11px] text-slate-400 font-mono mb-4">
                   Calculated area expansion in m² derived from multi-temporal Sentinel-2 spectral indices
@@ -300,7 +300,7 @@ export default function ParcelDetailModal({
             className="bg-purple-900 hover:bg-purple-800 border border-purple-700 text-purple-200 font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-purple-900/20"
           >
             <RotateCcw className="w-4 h-4 text-purple-300" />
-            {isRechecking ? 'Simulating 2027 Scan...' : 'Simulate 2027 Post-Notice Re-Check (1,150 m²)'}
+            {isRechecking ? 'Simulating 2027 Scenario...' : 'Simulate 2027 Post-Notice Scenario (1,150 m²)'}
           </button>
 
           <div className="flex items-center gap-2">

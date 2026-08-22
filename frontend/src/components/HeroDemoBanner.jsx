@@ -18,7 +18,7 @@ export default function HeroDemoBanner({ onTriggerHeroDemo }) {
             </span>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-            Test the full closed loop: <strong>2024 (120 m²) → 2025 (480 m²) → 2026 (920 m² Growing Fast, Score 85/100, Notice Issued)</strong>. Then simulate 2027 scan (1,150 m²) to see automatic <strong>RE-CHECK REQUIRED</strong> escalation.
+            Test the full closed loop: <strong>2024 (120 m²) → 2025 (480 m²) → 2026 (920 m² Growing Fast, Score 85/100, Notice Issued)</strong>. Then simulate 2027 scenario (1,150 m²) to see automatic <strong>RE-CHECK REQUIRED</strong> escalation.
           </p>
         </div>
       </div>

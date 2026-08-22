@@ -1,20 +1,18 @@
 """
-ForeSite Database Abstraction & Persistence Layer (SQLite + Ward Data Schema)
-
-Enables clean REST CRUD operations with ward, ownership, score history, and auto recalculation of trajectory and urgency scoring.
+ForeSite Database Interface & Data Persistence Layer
+Initializes SQLite database and handles read/write transactions for government land parcels.
 """
 
-import json
-import sqlite3
 import os
-from typing import List, Dict, Any, Optional
+import sqlite3
+import json
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 
 from ml.trajectory import classify_trajectory
 from ml.scoring import calculate_urgency_score
-from data.seed_generator import generate_seed_parcels
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "foresite.db")
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "foresite.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -33,7 +31,7 @@ def init_db(force_reseed: bool = False):
     else:
         # Check if table exists and has the expected columns. If not, drop it to migrate.
         try:
-            cursor.execute("SELECT score_history_json FROM parcels LIMIT 1")
+            cursor.execute("SELECT spectral_json FROM parcels LIMIT 1")
         except sqlite3.OperationalError:
             # Table or column does not exist. Drop table so it gets recreated with correct schema.
             cursor.execute("DROP TABLE IF EXISTS parcels")
@@ -59,7 +57,16 @@ def init_db(force_reseed: bool = False):
             last_checked TEXT,
             post_notice_growth INTEGER,
             is_hero INTEGER,
-            audit_trail_json TEXT
+            audit_trail_json TEXT,
+            
+            -- V3 Technical Attributes
+            spectral_json TEXT,
+            detection_confidence INTEGER DEFAULT 50,
+            is_false_positive INTEGER DEFAULT 0,
+            false_positive_reason TEXT,
+            verification_outcome TEXT,
+            verification_json TEXT,
+            change_mask_json TEXT
         )
     """)
 
@@ -71,6 +78,8 @@ def init_db(force_reseed: bool = False):
     if count == 0 or force_reseed:
         cursor.execute("DELETE FROM parcels")
         
+        # Delayed import to avoid circular dependency
+        from data.seed_generator import generate_seed_parcels
         seed_data = generate_seed_parcels(1000)
         for p in seed_data:
             cursor.execute("""
@@ -78,8 +87,11 @@ def init_db(force_reseed: bool = False):
                     id, parcel_id, state, district, ward, land_category, ownership,
                     latitude, longitude, area_sqm, polygon_json,
                     history_json, score_history_json, status, notice_date, last_checked,
-                    post_notice_growth, is_hero, audit_trail_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    post_notice_growth, is_hero, audit_trail_json,
+                    
+                    spectral_json, detection_confidence, is_false_positive,
+                    false_positive_reason, verification_outcome, verification_json, change_mask_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 p["id"],
                 p["parcel_id"],
@@ -99,7 +111,15 @@ def init_db(force_reseed: bool = False):
                 p.get("last_checked", "2026-08-20"),
                 1 if p["post_notice_growth"] else 0,
                 1 if p.get("is_hero") else 0,
-                json.dumps(p["audit_trail"])
+                json.dumps(p["audit_trail"]),
+                
+                json.dumps(p.get("spectral", {})),
+                p.get("detection_confidence", 50),
+                1 if p.get("is_false_positive", False) else 0,
+                p.get("false_positive_reason"),
+                p.get("verification_outcome"),
+                json.dumps(p.get("verification", {})),
+                json.dumps(p.get("change_mask", []))
             ))
         conn.commit()
     conn.close()
@@ -132,7 +152,16 @@ def _format_parcel(row: sqlite3.Row) -> Dict[str, Any]:
         "post_notice_growth": post_notice_growth,
         "is_hero": bool(row["is_hero"]),
         "audit_trail": json.loads(row["audit_trail_json"]),
-        "trajectory": trajectory
+        "trajectory": trajectory,
+        
+        # V3 new fields
+        "spectral": json.loads(row["spectral_json"]) if row["spectral_json"] else {},
+        "detection_confidence": row["detection_confidence"],
+        "is_false_positive": bool(row["is_false_positive"]),
+        "false_positive_reason": row["false_positive_reason"],
+        "verification_outcome": row["verification_outcome"],
+        "verification": json.loads(row["verification_json"]) if row["verification_json"] else {},
+        "change_mask": json.loads(row["change_mask_json"]) if row["change_mask_json"] else []
     }
 
     scoring_result = calculate_urgency_score(parcel_dict)
@@ -228,6 +257,56 @@ def update_parcel_action(parcel_id: str, new_status: str, notes: Optional[str] =
 
     return get_parcel_by_id(parcel_id)
 
+def update_parcel_verification(parcel_id: str, outcome: str, notes: Optional[str] = None, officer: str = "Field Inspector") -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM parcels WHERE parcel_id = ? OR id = ?", (parcel_id, parcel_id))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    audit_trail = json.loads(row["audit_trail_json"])
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    event_msg = f"Field Verification recorded: '{outcome}' by {officer}. Notes: {notes}"
+    audit_trail.append({
+        "timestamp": now_str,
+        "event": event_msg,
+        "actor": officer
+    })
+    
+    verification_data = {
+        "verified_at": now_str,
+        "officer": officer,
+        "outcome": outcome,
+        "notes": notes
+    }
+
+    # Map verification outcome to appropriate status
+    is_fp = 1 if outcome in ["False Positive", "No Significant Change"] else 0
+    fp_reason = notes if is_fp else row["false_positive_reason"]
+    
+    new_status = "Resolved" if outcome in ["Resolved", "Authorized Construction", "False Positive", "No Significant Change"] else "Under Review"
+
+    cursor.execute("""
+        UPDATE parcels
+        SET status = ?, verification_outcome = ?, verification_json = ?, is_false_positive = ?, false_positive_reason = ?, audit_trail_json = ?
+        WHERE id = ?
+    """, (
+        new_status,
+        outcome,
+        json.dumps(verification_data),
+        is_fp,
+        fp_reason,
+        json.dumps(audit_trail),
+        row["id"]
+    ))
+    conn.commit()
+    conn.close()
+
+    return get_parcel_by_id(parcel_id)
+
 def simulate_recheck_observation(parcel_id: str, year_2027_area: float = 1150.0) -> Optional[Dict[str, Any]]:
     conn = get_connection()
     cursor = conn.cursor()
@@ -240,10 +319,19 @@ def simulate_recheck_observation(parcel_id: str, year_2027_area: float = 1150.0)
     history = json.loads(row["history_json"])
     score_history = json.loads(row["score_history_json"]) if row["score_history_json"] else {"2024": 30, "2025": 58, "2026": 85}
     audit_trail = json.loads(row["audit_trail_json"])
+    spectral = json.loads(row["spectral_json"]) if row["spectral_json"] else {}
     
     y26 = history.get("2026", 920.0)
     history["2027"] = year_2027_area
     score_history["2027"] = 95
+
+    # Simulate spectral for 2027
+    from ml.change_detection import simulate_spectral_bands, compute_spectral_indices, generate_change_mask
+    bands_2027 = simulate_spectral_bands(year_2027_area, row["area_sqm"], 2027)
+    spectral["2027"] = compute_spectral_indices(bands_2027)
+    
+    # Update change mask for 2027
+    new_mask = generate_change_mask(row["latitude"], row["longitude"], year_2027_area - history.get("2024", 0.0), [], 2027)
 
     growth_occurred = year_2027_area > y26
     new_status = "Re-check Required" if growth_occurred else "Resolved"
@@ -262,7 +350,7 @@ def simulate_recheck_observation(parcel_id: str, year_2027_area: float = 1150.0)
 
     cursor.execute("""
         UPDATE parcels
-        SET history_json = ?, score_history_json = ?, status = ?, post_notice_growth = ?, last_checked = ?, audit_trail_json = ?
+        SET history_json = ?, score_history_json = ?, status = ?, post_notice_growth = ?, last_checked = ?, audit_trail_json = ?, spectral_json = ?, change_mask_json = ?
         WHERE id = ?
     """, (
         json.dumps(history),
@@ -271,6 +359,8 @@ def simulate_recheck_observation(parcel_id: str, year_2027_area: float = 1150.0)
         post_notice_growth,
         datetime.now().strftime("%Y-%m-%d"),
         json.dumps(audit_trail),
+        json.dumps(spectral),
+        json.dumps(new_mask),
         row["id"]
     ))
     conn.commit()

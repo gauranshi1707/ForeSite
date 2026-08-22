@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, MapPin, Layers, Calendar, RotateCcw, FileCheck, ChevronRight,
   AlertTriangle, Clock, Info, TrendingUp, TrendingDown, Minus
 } from 'lucide-react';
 import ActionFormModal from './ActionFormModal';
+import { fetchParcelEvidence } from '../services/api';
+
+// Deterministic hero parcel year data — mirrors seed_generator.py
+const HERO_YEAR_DATA = {
+  2024: { area: 120,  score: 32, traj: 'STABLE',        status: 'Monitoring',         risk: 'Low' },
+  2025: { area: 480,  score: 58, traj: 'GROWING',       status: 'Alert Flagged',      risk: 'Medium' },
+  2026: { area: 920,  score: 85, traj: 'GROWING FAST',  status: 'Notice Issued',      risk: 'High' },
+  2027: { area: 1150, score: 95, traj: 'GROWING FAST',  status: 'Re-check Required',  risk: 'Critical' },
+};
 
 // ----------------------------------------------------------------
 // Helpers
@@ -68,11 +77,38 @@ export default function ParcelSidePanel({
 }) {
   const [showActionForm, setShowActionForm] = useState(false);
   const [isRechecking, setIsRechecking] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [evidenceData, setEvidenceData] = useState(null);
+
+  useEffect(() => {
+    // Reset evidence data when parcel changes
+    setEvidenceData(null);
+    setShowEvidence(false);
+  }, [parcel.parcel_id]);
 
   if (!parcel) return null;
 
-  const currentArea = parcel.history?.[String(selectedYear)] ?? parcel.history?.['2026'] ?? 0;
-  const baselineArea = parcel.history?.['2024'] ?? 0;
+  const toggleEvidence = async () => {
+    if (!showEvidence && !evidenceData) {
+      try {
+        const data = await fetchParcelEvidence(parcel.parcel_id);
+        setEvidenceData(data);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setShowEvidence(!showEvidence);
+  };
+
+  // Year-aware metrics (hero parcel uses deterministic HERO_YEAR_DATA)
+  const heroYr = parcel.is_hero ? (HERO_YEAR_DATA[selectedYear] || HERO_YEAR_DATA[2026]) : null;
+  const displayScore = heroYr ? heroYr.score : (parcel.score_history?.[String(selectedYear)] ?? parcel.urgency_score);
+  const displayTraj = heroYr ? heroYr.traj : parcel.trajectory;
+  const displayStatus = heroYr ? heroYr.status : parcel.status;
+  const displayRisk = heroYr ? heroYr.risk : parcel.risk_level;
+
+  const currentArea = heroYr ? heroYr.area : (parcel.history?.[String(selectedYear)] ?? parcel.history?.['2026'] ?? 0);
+  const baselineArea = parcel.is_hero ? HERO_YEAR_DATA[2024].area : (parcel.history?.['2024'] ?? 0);
   const netGrowth = currentArea - baselineArea;
   const growthPct = baselineArea > 0 ? ((netGrowth / baselineArea) * 100).toFixed(0) : '—';
 
@@ -126,32 +162,139 @@ export default function ParcelSidePanel({
           </div>
         )}
 
+        {/* False Positive notice */}
+        {parcel.is_false_positive && (
+          <div className="mx-4 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 flex items-start gap-2">
+            <AlertTriangle size={14} className="text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <div className="text-[12px] font-semibold text-amber-800">Potential False Positive</div>
+              <div className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+                <strong>Notes:</strong> {parcel.false_positive_reason || 'Change may be seasonal or sensor artifact.'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Verification Outcome notice */}
+        {parcel.verification_outcome && (
+          <div className="mx-4 mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 flex items-start gap-2">
+            <FileCheck size={14} className="text-blue-700 mt-0.5 shrink-0" />
+            <div>
+              <div className="text-[12px] font-semibold text-blue-800">Official Field Verification</div>
+              <div className="text-[11px] text-blue-600 mt-0.5 leading-snug">
+                <strong>Outcome:</strong> {parcel.verification_outcome}
+                {parcel.verification?.officer && (
+                  <div className="mt-0.5 opacity-80">
+                    Inspected by {parcel.verification.officer} on {parcel.verification.verified_at}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
 
-          {/* Score + Trajectory row */}
+          {/* Score + Confidence + Trajectory Grid */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="fs-card p-3">
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-1">Priority Score</div>
-              <div className={`score-chip text-lg font-black font-mono ${getScoreClass(parcel.urgency_score)}`}>
-                {parcel.urgency_score}<span className="text-[11px] font-normal opacity-60">/100</span>
+            <div className="fs-card p-3 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-1">
+                  Priority Score <span className="font-normal text-blue-600">({selectedYear})</span>
+                </div>
+                <div className={`score-chip text-lg font-black font-mono ${getScoreClass(displayScore)}`}>
+                  {displayScore}<span className="text-[11px] font-normal opacity-60">/100</span>
+                </div>
+                <ScoreBar score={displayScore} />
               </div>
-              <ScoreBar score={parcel.urgency_score} />
-              <div className="text-[10px] text-stone-400 mt-1">{parcel.risk_level} Risk</div>
+              <div className="text-[10px] text-stone-400 mt-2 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                <span>{displayRisk} Risk</span>
+                <span className={`font-semibold ${
+                  displayStatus === 'Re-check Required' ? 'text-rose-700' :
+                  displayStatus === 'Notice Issued' ? 'text-amber-700' :
+                  displayStatus === 'Alert Flagged' ? 'text-yellow-700' : 'text-stone-600'
+                }`}>{displayStatus}</span>
+              </div>
             </div>
-            <div className="fs-card p-3">
-              <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-1">Trajectory</div>
-              <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-[12px] font-semibold mt-0.5 ${getTrajBg(parcel.trajectory)}`}>
-                <TrajIcon traj={parcel.trajectory} />
-                {parcel.trajectory === 'GROWING FAST' ? 'Growing Fast' :
-                 parcel.trajectory === 'GROWING' ? 'Growing' : 'Stable'}
+
+            <div className="fs-card p-3 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] font-semibold text-stone-400 uppercase tracking-wider mb-1">Detection Confidence</div>
+                <div className={`text-lg font-black font-mono ${parcel.detection_confidence >= 80 ? 'text-blue-700' : parcel.detection_confidence >= 60 ? 'text-amber-700' : 'text-stone-500'}`}>
+                  {parcel.detection_confidence || '—'}<span className="text-[11px] font-normal opacity-60">%</span>
+                </div>
+                <div className="w-full bg-stone-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                  <div className={`h-full rounded-full ${parcel.detection_confidence >= 80 ? 'bg-blue-600' : parcel.detection_confidence >= 60 ? 'bg-amber-500' : 'bg-stone-400'} transition-all duration-500`} style={{ width: `${parcel.detection_confidence || 0}%` }} />
+                </div>
               </div>
-              <div className="mt-2">
-                <span className={`status-badge ${getStatusClass(parcel.status)}`}>
-                  {parcel.status}
+              <div className="text-[10px] text-stone-400 mt-2 pt-1.5 border-t border-stone-100 flex items-center justify-between">
+                <span>Trajectory <span className="text-blue-500">({selectedYear}):</span></span>
+                <span className={`font-semibold ${getTrajColor(displayTraj)}`}>
+                  {displayTraj === 'GROWING FAST' ? 'Growing Fast' :
+                   displayTraj === 'GROWING' ? 'Growing' : 'Stable'}
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Evidence Stack */}
+          <div className="fs-card p-3">
+            <button 
+              onClick={toggleEvidence}
+              className="w-full flex items-center justify-between text-[10px] font-semibold text-stone-500 uppercase tracking-wider"
+            >
+              <span className="flex items-center gap-1.5">
+                <Layers size={11} />
+                Geospatial Evidence Stack
+              </span>
+              <span className="text-[10px] text-blue-700 hover:underline">
+                {showEvidence ? 'Hide' : 'Show Details'}
+              </span>
+            </button>
+            
+            {showEvidence && (
+              <div className="mt-3.5 space-y-3">
+                {evidenceData ? (
+                  <>
+                    {/* Why Flagged Explanation */}
+                    {evidenceData.why_flagged && (
+                      <div className={`p-2.5 rounded text-[11px] ${evidenceData.why_flagged.flagged ? 'bg-rose-50/50 border border-rose-100' : 'bg-stone-50 border border-stone-200'}`}>
+                        <div className="font-semibold text-stone-900">{evidenceData.why_flagged.title}</div>
+                        <ul className="list-disc pl-4 mt-1.5 space-y-1 text-stone-600">
+                          {evidenceData.why_flagged.reasons.map((reason, rIdx) => (
+                            <li key={rIdx}>{reason}</li>
+                          ))}
+                        </ul>
+                        <div className="mt-2 text-[10px] font-semibold text-stone-500">
+                          Recommendation: <span className="text-blue-700 uppercase tracking-wider text-[9px]">{evidenceData.why_flagged.recommended_action}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evidence List */}
+                    <div className="space-y-2.5 pt-1.5 border-t border-stone-100">
+                      {evidenceData.evidence.map((item) => (
+                        <div key={item.id} className="flex items-start gap-2.5 text-[11px] leading-snug">
+                          <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
+                            item.confidence_impact === 'critical' ? 'bg-red-500' :
+                            item.confidence_impact === 'high' ? 'bg-orange-500' :
+                            item.confidence_impact === 'medium' ? 'bg-amber-500' :
+                            item.confidence_impact === 'negative' ? 'bg-purple-500' : 'bg-stone-400'
+                          }`} />
+                          <div>
+                            <div className="font-semibold text-stone-800">{item.title}</div>
+                            <div className="text-stone-500 mt-0.5">{item.description}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-2 text-[11px] text-stone-400">Loading evidence data...</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Land info */}
@@ -285,7 +428,7 @@ export default function ParcelSidePanel({
                 className="flex-1 flex items-center justify-center gap-1.5 border border-rose-300 text-rose-700 hover:bg-rose-50 text-[11px] font-medium py-1.5 rounded-md transition-colors"
               >
                 <RotateCcw size={11} />
-                {isRechecking ? 'Simulating 2027…' : 'Simulate 2027 Re-check'}
+                {isRechecking ? 'Simulating 2027 Scenario…' : 'Simulate 2027 Scenario' }
               </button>
             )}
             <button

@@ -15,7 +15,7 @@ export default function TimelineSlider({ selectedYear, onChangeYear, has2027Data
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-cyan-400" />
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Multi-Temporal Land Observation Timeline (2024–2027)
+            Multi-Temporal Observation & Projection Timeline (2024–2027)
           </h3>
         </div>
         <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1.5">

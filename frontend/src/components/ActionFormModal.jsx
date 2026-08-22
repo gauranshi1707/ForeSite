@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { X, Send, AlertCircle } from 'lucide-react';
+import { submitVerification } from '../services/api';
 
 const ACTION_STATUSES = [
   { value: 'Under Review',          label: 'Mark Under Review',           desc: 'Assign case for satellite evidence audit' },
   { value: 'Inspection Scheduled',  label: 'Schedule Field Inspection',   desc: 'Dispatch field officer for ground survey' },
+  { value: 'Record Verification',   label: 'Record Field Verification',   desc: 'Log ground survey verification outcome' },
   { value: 'Notice Issued',         label: 'Issue Official Notice',        desc: 'Serve formal legal stop-work or eviction notice' },
   { value: 'Resolved',              label: 'Mark Resolved',                desc: 'Site verified cleared or structure demolished' },
   { value: 'Re-check Required',     label: 'Flag for Re-check',           desc: 'Schedule post-notice satellite re-observation' },
@@ -11,6 +13,7 @@ const ACTION_STATUSES = [
 
 export default function ActionFormModal({ parcel, onClose, onSubmitAction }) {
   const [status, setStatus] = useState(parcel.status || 'Under Review');
+  const [verificationOutcome, setVerificationOutcome] = useState('Confirmed Land-Use Change');
   const [notes, setNotes] = useState('');
   const [officialId, setOfficialId] = useState('S. Verma, District Magistrate');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -18,17 +21,29 @@ export default function ActionFormModal({ parcel, onClose, onSubmitAction }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    await onSubmitAction(parcel.id, status, notes, officialId);
-    setIsSubmitting(false);
-    onClose();
+    try {
+      if (status === 'Record Verification') {
+        const updated = await submitVerification(parcel.parcel_id, verificationOutcome, notes, officialId);
+        if (onSubmitAction) {
+          await onSubmitAction(parcel.id, updated.status, `Verification Outcome: ${verificationOutcome}. Notes: ${notes}`, officialId);
+        }
+      } else {
+        await onSubmitAction(parcel.id, status, notes, officialId);
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsSubmitting(false);
+      onClose();
+    }
   };
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
-      <div className="bg-white border border-stone-200 w-full max-w-md rounded-xl shadow-xl overflow-hidden">
+      <div className="bg-white border border-stone-200 w-full max-w-md rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+        <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between bg-stone-50 shrink-0">
           <div>
             <h3 className="font-bold text-stone-900 text-[15px]">Record Official Action</h3>
             <p className="text-[11px] text-stone-500 mt-0.5 font-mono">{parcel.parcel_id} — {parcel.district}</p>
@@ -38,8 +53,8 @@ export default function ActionFormModal({ parcel, onClose, onSubmitAction }) {
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {/* Form Container (Scrollable if needed) */}
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
 
           {/* HITL note */}
           <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-md px-3 py-2 text-[11px] text-blue-700">
@@ -81,6 +96,26 @@ export default function ActionFormModal({ parcel, onClose, onSubmitAction }) {
             </div>
           </div>
 
+          {/* Verification Dropdown */}
+          {status === 'Record Verification' && (
+            <div className="animate-fade-in space-y-1">
+              <label className="block text-[12px] font-semibold text-stone-700 mb-1">
+                Field Verification Outcome
+              </label>
+              <select
+                value={verificationOutcome}
+                onChange={e => setVerificationOutcome(e.target.value)}
+                className="w-full border border-stone-200 rounded-md px-3 py-2 text-[12px] text-stone-800 bg-white outline-none focus:border-blue-400"
+              >
+                <option value="Confirmed Land-Use Change">Confirmed Land-Use Change</option>
+                <option value="No Significant Change">No Significant Change</option>
+                <option value="Authorized Construction">Authorized Construction</option>
+                <option value="False Positive">False Positive</option>
+                <option value="Requires Further Review">Requires Further Review</option>
+              </select>
+            </div>
+          )}
+
           {/* Authorizing officer */}
           <div>
             <label className="block text-[12px] font-semibold text-stone-700 mb-1">
@@ -109,7 +144,7 @@ export default function ActionFormModal({ parcel, onClose, onSubmitAction }) {
           </div>
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-1 border-t border-stone-100">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100 shrink-0">
             <button
               type="button"
               onClick={onClose}

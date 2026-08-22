@@ -65,5 +65,52 @@ def get_parcel_imagery_endpoint(parcel_id: str, year: int = Query(2026)):
         year=year,
         center_lat=parcel["latitude"],
         center_lng=parcel["longitude"],
-        change_area=change_area
+        change_area=change_area,
+        parcel_area=parcel.get("area_sqm", 15000.0)
     )
+
+@router.get("/{parcel_id}/evidence")
+def get_parcel_evidence(parcel_id: str):
+    from ml.change_detection import generate_evidence_stack, generate_why_flagged
+    parcel = get_parcel_by_id(parcel_id)
+    if not parcel:
+        raise HTTPException(status_code=404, detail="Parcel not found")
+    evidence = generate_evidence_stack(parcel)
+    why = generate_why_flagged(parcel)
+    return {"evidence": evidence, "why_flagged": why}
+
+@router.get("/{parcel_id}/change-analysis")
+def get_parcel_change_analysis(parcel_id: str):
+    from ml.change_detection import get_parcel_imagery
+    parcel = get_parcel_by_id(parcel_id)
+    if not parcel:
+        raise HTTPException(status_code=404, detail="Parcel not found")
+    
+    history = parcel.get("history", {})
+    analyses = {}
+    for year_str, area in history.items():
+        year = int(year_str)
+        analyses[year_str] = get_parcel_imagery(
+            parcel_id, year, parcel["latitude"], parcel["longitude"],
+            area, parcel.get("area_sqm", 15000.0)
+        )
+    
+    return {
+        "parcel_id": parcel_id,
+        "spectral": parcel.get("spectral", {}),
+        "detection_confidence": parcel.get("detection_confidence", 50),
+        "change_mask": parcel.get("change_mask", []),
+        "yearly_analysis": analyses
+    }
+
+from fastapi import Body
+@router.post("/{parcel_id}/verification")
+def record_verification(parcel_id: str, body: dict = Body(...)):
+    from data.db import update_parcel_verification
+    outcome = body.get("outcome", "Requires Further Review")
+    notes = body.get("notes", "")
+    officer = body.get("officer", "Field Inspector")
+    result = update_parcel_verification(parcel_id, outcome, notes, officer)
+    if not result:
+        raise HTTPException(status_code=404, detail="Parcel not found")
+    return result

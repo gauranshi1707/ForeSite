@@ -68,3 +68,25 @@ export async function checkHealth() {
   if (!res.ok) throw new Error('Health check failed');
   return res.json();
 }
+
+export async function fetchParcelEvidence(parcelId) {
+  const res = await fetch(`${API_BASE}/parcels/${parcelId}/evidence`);
+  if (!res.ok) throw new Error('Failed to fetch evidence');
+  return res.json();
+}
+
+export async function fetchParcelChangeAnalysis(parcelId) {
+  const res = await fetch(`${API_BASE}/parcels/${parcelId}/change-analysis`);
+  if (!res.ok) throw new Error('Failed to fetch change analysis');
+  return res.json();
+}
+
+export async function submitVerification(parcelId, outcome, notes, officer) {
+  const res = await fetch(`${API_BASE}/parcels/${parcelId}/verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outcome, notes, officer }),
+  });
+  if (!res.ok) throw new Error('Failed to submit verification');
+  return res.json();
+}
