@@ -1,0 +1,30 @@
+# Node / Frontend dependency directories
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Python / Backend cache and virtual environments
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.env/
+.venv/
+
+# SQLite database files (regenerated at runtime via startup seed)
+backend/data/*.db
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
