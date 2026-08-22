@@ -3,6 +3,10 @@ ForeSite - Predictive Land-Change Intelligence System
 Backend FastAPI Application Entrypoint
 """
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -31,7 +35,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "https://foresite-blue.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
