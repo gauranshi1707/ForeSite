@@ -1,0 +1,21 @@
+{
+  "name": "foresite",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build && cd .. && rm -rf dist && cp -r frontend/dist dist"
+  },
+  "description": "> **Smart India Hackathon 2026 MVP** | Multi-Temporal Satellite Land Parcel Monitoring & Enforcement Prioritization System",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gauranshi1707/ForeSite.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/gauranshi1707/ForeSite/issues"
+  },
+  "homepage": "https://github.com/gauranshi1707/ForeSite#readme"
+}
