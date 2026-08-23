@@ -83,7 +83,10 @@ def init_db(force_reseed: bool = False):
         
         # Delayed import to avoid circular dependency
         from data.seed_generator import generate_seed_parcels
-        seed_data = generate_seed_parcels(1000)
+        
+        # Reduce seed count to 20 on Vercel to prevent cold-start timeouts
+        seed_count = 20 if os.environ.get("VERCEL") else 1000
+        seed_data = generate_seed_parcels(seed_count)
         for p in seed_data:
             cursor.execute("""
                 INSERT INTO parcels (
