@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000');
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export async function fetchStatistics() {
   const res = await fetch(`${API_BASE}/statistics`);
