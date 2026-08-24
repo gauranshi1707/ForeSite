@@ -1,6 +1,56 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --tw-white: 255 255 255;
+    --tw-black: 0 0 0;
+    
+    --tw-stone-25: 253 252 251;
+    --tw-stone-50: 250 249 247;
+    --tw-stone-100: 245 245 244;
+    --tw-stone-200: 231 229 228;
+    --tw-stone-300: 214 211 209;
+    --tw-stone-400: 168 162 158;
+    --tw-stone-500: 120 113 108;
+    --tw-stone-600: 87 83 78;
+    --tw-stone-700: 68 64 60;
+    --tw-stone-800: 41 37 36;
+    --tw-stone-900: 28 25 23;
+    
+    /* Semantic leafet background */
+    --leaflet-bg: #e8e5de;
+    --leaflet-popup-bg: #ffffff;
+    --leaflet-popup-border: #dedad3;
+    --leaflet-popup-text: #1c1a17;
+  }
+
+  .dark {
+    /* Muted dark slate palette for enterprise look */
+    --tw-white: 23 27 33;      /* surface panels */
+    --tw-black: 255 255 255;   /* inverse */
+    
+    --tw-stone-25: 15 17 21;   /* background */
+    --tw-stone-50: 18 21 26;   /* slightly elevated */
+    --tw-stone-100: 31 35 43;  /* borders, hovered */
+    --tw-stone-200: 45 52 64;  /* borders heavy */
+    --tw-stone-300: 60 70 85;  /* muted icons/borders */
+    --tw-stone-400: 100 116 139; /* text-muted */
+    --tw-stone-500: 120 135 155; /* text-secondary */
+    --tw-stone-600: 148 163 184; /* text-secondary light */
+    --tw-stone-700: 203 213 225; /* text-primary */
+    --tw-stone-800: 226 232 240; /* text-primary bright */
+    --tw-stone-900: 241 245 249; /* text-title */
+
+    --leaflet-bg: #111418;
+    --leaflet-popup-bg: #1f232b;
+    --leaflet-popup-border: #2d3440;
+    --leaflet-popup-text: #e2e8f0;
+  }
+}
+
 
 /* ============================================================
    FORESITE — LIGHT GIS DESIGN SYSTEM
@@ -39,15 +89,15 @@
    ============================================================ */
 
 .leaflet-container {
-  background-color: #e8e5de !important;
+  background-color: var(--leaflet-bg) !important;
   font-family: 'Inter', sans-serif !important;
 }
 
 /* Light popup theme */
 .leaflet-popup-content-wrapper {
-  background: #ffffff !important;
-  color: #1c1a17 !important;
-  border: 1px solid #dedad3 !important;
+  background: var(--leaflet-popup-bg) !important;
+  color: var(--leaflet-popup-text) !important;
+  border: 1px solid var(--leaflet-popup-border) !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.12) !important;
   padding: 0 !important;
@@ -58,7 +108,7 @@
 }
 
 .leaflet-popup-tip {
-  background: #ffffff !important;
+  background: var(--leaflet-popup-bg) !important;
   box-shadow: none !important;
 }
 
@@ -70,14 +120,14 @@
 }
 
 .leaflet-popup-close-button:hover {
-  color: #1c1a17 !important;
+  color: var(--leaflet-popup-text) !important;
 }
 
 /* Tooltip */
 .leaflet-tooltip {
-  background: #ffffff !important;
-  border: 1px solid #dedad3 !important;
-  color: #1c1a17 !important;
+  background: var(--leaflet-popup-bg) !important;
+  border: 1px solid var(--leaflet-popup-border) !important;
+  color: var(--leaflet-popup-text) !important;
   border-radius: 6px !important;
   box-shadow: 0 2px 12px rgba(0,0,0,0.10) !important;
   padding: 8px 12px !important;
@@ -87,26 +137,26 @@
 }
 
 .leaflet-tooltip-top:before {
-  border-top-color: #dedad3 !important;
+  border-top-color: var(--leaflet-popup-border) !important;
 }
 
 /* Controls */
 .leaflet-control-zoom {
-  border: 1px solid #dedad3 !important;
+  border: 1px solid var(--leaflet-popup-border) !important;
   border-radius: 6px !important;
   overflow: hidden;
   box-shadow: 0 1px 4px rgba(0,0,0,0.10) !important;
 }
 
 .leaflet-control-zoom a {
-  background: #ffffff !important;
+  background: var(--leaflet-popup-bg) !important;
   color: #3d3a36 !important;
-  border-bottom: 1px solid #dedad3 !important;
+  border-bottom: 1px solid var(--leaflet-popup-border) !important;
 }
 
 .leaflet-control-zoom a:hover {
   background: #f5f4f1 !important;
-  color: #1c1a17 !important;
+  color: var(--leaflet-popup-text) !important;
 }
 
 /* Attribution */

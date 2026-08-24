@@ -66,6 +66,15 @@ export default function CitizenMap() {
   const [mapZoom] = useState(13);
   const [showForm, setShowForm] = useState(false);
 
+  // ALL hooks must be declared before any early return (Rules of Hooks)
+  const [theme, setTheme] = useState(() => localStorage.getItem('foresite_theme') || 'light');
+
+  useEffect(() => {
+    const handler = () => setTheme(localStorage.getItem('foresite_theme') || 'light');
+    window.addEventListener('foresite_theme_change', handler);
+    return () => window.removeEventListener('foresite_theme_change', handler);
+  }, []);
+
   const requestGeolocation = () => {
     setLocationState('loading');
     if ('geolocation' in navigator) {
@@ -94,6 +103,11 @@ export default function CitizenMap() {
     return () => clearTimeout(timer);
   }, []);
 
+  const tileUrl = theme === 'dark'
+    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
+  // Early return after all hooks
   if (showForm) {
     return <ReportForm position={position} onCancel={() => setShowForm(false)} />;
   }
@@ -111,7 +125,7 @@ export default function CitizenMap() {
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            url={tileUrl}
             subdomains="abcd"
             maxZoom={20}
           />

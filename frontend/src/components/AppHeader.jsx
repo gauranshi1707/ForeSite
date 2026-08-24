@@ -1,6 +1,7 @@
 import React from 'react';
 import { Globe, Map, Satellite, ShieldAlert, Activity, User, Users } from 'lucide-react';
 import ProfileSwitcher from './ProfileSwitcher';
+import ThemeToggle from './ThemeToggle';
 
 const TABS = [
   { id: 'overview',   label: 'Overview',         icon: Map },
@@ -25,9 +26,6 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
               <h1 className="text-[15px] font-bold text-stone-900 tracking-tight leading-none">
                 ForeSite
               </h1>
-              <span className="text-[9px] font-bold text-stone-500 uppercase tracking-wider leading-none">
-                SIH 2026
-              </span>
             </div>
           </div>
         </div>
@@ -60,6 +58,7 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
                 HIGH PRIORITY
               </span>
             </div>
+            <ThemeToggle />
             <ProfileSwitcher />
           </div>
       </div>

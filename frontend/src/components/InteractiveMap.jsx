@@ -246,6 +246,17 @@ export default function InteractiveMap({ parcels, selectedParcel, onSelectParcel
     return getBuiltupFootprint(selectedParcel, selectedYear, clusterIdx);
   }, [selectedParcel, selectedYear, demoClusterIds]);
 
+  const [theme, setTheme] = React.useState(() => localStorage.getItem('foresite_theme') || 'light');
+  useEffect(() => {
+    const handler = () => setTheme(localStorage.getItem('foresite_theme') || 'light');
+    window.addEventListener('foresite_theme_change', handler);
+    return () => window.removeEventListener('foresite_theme_change', handler);
+  }, []);
+
+  const tileUrl = theme === 'dark'
+    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
   return (
     <div className="relative w-full h-full">
       <MapContainer
@@ -255,10 +266,9 @@ export default function InteractiveMap({ parcels, selectedParcel, onSelectParcel
         className="w-full h-full"
         zoomControl={true}
       >
-        {/* CartoDB Positron — light neutral GIS tile */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          url={tileUrl}
           subdomains="abcd"
           maxZoom={20}
         />

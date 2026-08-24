@@ -31,9 +31,6 @@ export default function RoleSelection({ onSelect }) {
             <h1 className="text-2xl font-bold text-stone-900 tracking-tight leading-none">
               ForeSite
             </h1>
-            <span className="text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded leading-none">
-              SIH 2026
-            </span>
           </div>
           <p className="text-sm text-stone-500">
             Predictive Land-Change Intelligence

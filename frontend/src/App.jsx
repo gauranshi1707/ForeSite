@@ -166,7 +166,7 @@ function OfficialApp({ onLogout }) {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-stone-50">
+    <div className="h-screen flex flex-col bg-stone-50">
       {/* Header with tab nav */}
       <AppHeader
         activeTab={activeTab}
@@ -176,8 +176,8 @@ function OfficialApp({ onLogout }) {
         onOpenPipeline={() => setPipelineModalOpen(true)}
       />
 
-      {/* Tab content — fills remaining height */}
-      <div className="flex-1 overflow-hidden flex flex-col tab-transition" key={activeTab}>
+      {/* Tab content: relative z-0 creates a contained stacking context for any maps inside */}
+      <div className="flex-1 overflow-hidden flex flex-col tab-transition relative z-0" key={activeTab}>
 
         {activeTab === 'overview' && (
           <OverviewTab

@@ -30,10 +30,22 @@ export default function CommunityReportsTab() {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionStatus, setActionStatus] = useState('');
   const [actionNotes, setActionNotes] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All Reports');
 
   useEffect(() => {
     setReports(getReports());
   }, []);
+
+  const [theme, setTheme] = useState(() => localStorage.getItem('foresite_theme') || 'light');
+  useEffect(() => {
+    const handler = () => setTheme(localStorage.getItem('foresite_theme') || 'light');
+    window.addEventListener('foresite_theme_change', handler);
+    return () => window.removeEventListener('foresite_theme_change', handler);
+  }, []);
+
+  const tileUrl = theme === 'dark'
+    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 
   const handleSelectReport = (report) => {
     setSelectedReport(report);
@@ -56,6 +68,10 @@ export default function CommunityReportsTab() {
     setShowActionModal(false);
   };
 
+  const filteredReports = filterStatus === 'All Reports' 
+    ? reports 
+    : reports.filter(r => r.status === filterStatus);
+
   return (
     <div className="flex-1 flex overflow-hidden bg-stone-50">
       
@@ -67,18 +83,34 @@ export default function CommunityReportsTab() {
         </div>
         
         {/* Simple Filters visually requested by user */}
-        <div className="px-4 py-2 border-b border-stone-200 flex gap-2 text-[10px] font-semibold text-stone-500 overflow-x-auto">
-          <button className="text-stone-900 bg-stone-100 px-2 py-1 rounded">All Reports</button>
-          <button className="hover:bg-stone-50 px-2 py-1 rounded">New</button>
-          <button className="hover:bg-stone-50 px-2 py-1 rounded">Under Review</button>
-          <button className="hover:bg-stone-50 px-2 py-1 rounded">Action Taken</button>
+        <div className="px-4 py-2.5 border-b border-stone-200 bg-white flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">Status:</span>
+          <select 
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="text-[11px] font-medium text-stone-800 bg-stone-50 border border-stone-200 rounded px-2 py-1 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="All Reports">All Reports</option>
+            <option value="New">New</option>
+            <option value="Under Review">Under Review</option>
+            <option value="Inspection Required">Inspection Required</option>
+            <option value="Action Taken">Action Taken</option>
+          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {reports.length === 0 ? (
-            <div className="p-6 text-center text-sm text-stone-500">No reports submitted yet.</div>
+          {filteredReports.length === 0 ? (
+            <div className="p-8 flex flex-col items-center justify-center text-center">
+              <div className="text-stone-300 mb-2">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-stone-700">No reports found</p>
+              <p className="text-[11px] text-stone-500 mt-1">Try selecting a different status filter.</p>
+            </div>
           ) : (
-            reports.map(report => (
+            filteredReports.map(report => (
               <div 
                 key={report.id} 
                 onClick={() => handleSelectReport(report)}
@@ -116,7 +148,7 @@ export default function CommunityReportsTab() {
               >
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                  url={tileUrl}
                   subdomains="abcd"
                   maxZoom={20}
                 />

@@ -16,9 +16,6 @@ export default function Header({ currentPeriod, onTriggerHeroDemo }) {
               <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                 FORE<span className="text-cyan-400 font-extrabold">SITE</span>
               </h1>
-              <span className="bg-cyan-950 text-cyan-400 border border-cyan-800 text-[10px] font-mono px-2 py-0.5 rounded font-semibold uppercase tracking-wider">
-                SIH 2026 MVP
-              </span>
               <span className="bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-mono px-2 py-0.5 rounded flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 Sentinel-2 Sync
