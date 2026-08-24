@@ -16,7 +16,12 @@ import {
   checkHealth
 } from './services/api';
 
-export default function App() {
+import RoleSelection from './components/RoleSelection';
+import CitizenApp from './components/citizen/CitizenApp';
+import CommunityReportsTab from './components/CommunityReportsTab';
+import { getRole } from './services/store';
+
+function OfficialApp({ onLogout }) {
   // ── App state ──────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState(null);
@@ -213,6 +218,10 @@ export default function App() {
             onNavigateToOverview={handleNavigateToOverview}
           />
         )}
+
+        {activeTab === 'reports' && (
+          <CommunityReportsTab />
+        )}
       </div>
 
       {/* Footer */}
@@ -232,3 +241,32 @@ export default function App() {
     </div>
   );
 }
+
+export default function App() {
+  const [role, setRoleState] = useState(getRole());
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setRoleState(getRole());
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('foresite_role_change', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('foresite_role_change', handleStorageChange);
+    };
+  }, []);
+
+  if (!role) {
+    return <RoleSelection onSelect={setRoleState} />;
+  }
+
+  if (role === 'citizen') {
+    return <CitizenApp />;
+  }
+
+  return <OfficialApp />;
+}
+

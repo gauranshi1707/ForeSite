@@ -1,11 +1,13 @@
 import React from 'react';
-import { Globe, Map, Satellite, ShieldAlert, Activity, User } from 'lucide-react';
+import { Globe, Map, Satellite, ShieldAlert, Activity, User, Users } from 'lucide-react';
+import ProfileSwitcher from './ProfileSwitcher';
 
 const TABS = [
   { id: 'overview',   label: 'Overview',         icon: Map },
   { id: 'satellite',  label: 'Satellite Analysis', icon: Satellite },
   { id: 'alerts',     label: 'Priority Alerts',    icon: ShieldAlert },
   { id: 'activity',   label: 'Activity',           icon: Activity },
+  { id: 'reports',    label: 'Community Reports',  icon: Users },
 ];
 
 export default function AppHeader({ activeTab, onTabChange, stats, locationContext, onOpenPipeline }) {
@@ -49,39 +51,31 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
         </div>
 
         {/* User badge */}
-        <div className="flex items-center gap-2 text-[11px]">
-          {/* KPI strip — tiny */}
-          <div className="hidden lg:flex items-center gap-3 mr-2 text-stone-500">
-            <span>
-              <span className="font-bold text-stone-800 font-mono">{stats?.total_parcels?.toLocaleString() || '1,000'}</span>
-              {' '}monitored
-            </span>
-            <span className="text-stone-300">|</span>
-            <span>
-              <span className="font-bold text-amber-700 font-mono">{stats?.active_alerts?.toLocaleString() || '—'}</span>
-              {' '}active alerts
-            </span>
-            <span className="text-stone-300">|</span>
-            <span>
-              <span className="font-bold text-red-700 font-mono">{stats?.high_priority?.toLocaleString() || '—'}</span>
-              {' '}high priority
-            </span>
-            <span className="text-stone-300">|</span>
-            <span>
-              <span className="font-bold text-rose-700 font-mono">{stats?.requiring_recheck?.toLocaleString() || '—'}</span>
-              {' '}re-check
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 rounded-md px-2.5 py-1.5">
-            <div className="w-5 h-5 rounded-full bg-blue-700 text-white flex items-center justify-center text-[9px] font-bold">
-              SV
+          <div className="flex items-center gap-2 text-[11px]">
+            {/* KPI strip — tiny */}
+            <div className="hidden lg:flex items-center gap-3 mr-2 text-stone-500">
+              <span>
+                <span className="font-bold text-stone-800 font-mono">{stats?.total_parcels?.toLocaleString() || '1,000'}</span>
+                {' '}monitored
+              </span>
+              <span className="text-stone-300">|</span>
+              <span>
+                <span className="font-bold text-amber-700 font-mono">{stats?.active_alerts?.toLocaleString() || '—'}</span>
+                {' '}active alerts
+              </span>
+              <span className="text-stone-300">|</span>
+              <span>
+                <span className="font-bold text-red-700 font-mono">{stats?.high_priority?.toLocaleString() || '—'}</span>
+                {' '}high priority
+              </span>
+              <span className="text-stone-300">|</span>
+              <span>
+                <span className="font-bold text-rose-700 font-mono">{stats?.requiring_recheck?.toLocaleString() || '—'}</span>
+                {' '}re-check
+              </span>
             </div>
-            <div className="hidden sm:block">
-              <div className="font-semibold text-stone-700 leading-none">S. Verma</div>
-              <div className="text-[9px] text-stone-400 leading-none mt-0.5">District Magistrate</div>
-            </div>
+            <ProfileSwitcher />
           </div>
-        </div>
       </div>
 
       {/* Tab navigation */}
