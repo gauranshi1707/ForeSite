@@ -35,8 +35,8 @@ export default function MapSearchBar({ parcels, onSelectParcel }) {
 
   return (
     <div className="relative w-72">
-      <div className={`flex items-center bg-white border rounded-lg shadow-sm transition-all duration-150 ${
-        isFocused ? 'border-blue-400 shadow-blue-100 shadow-md' : 'border-stone-300'
+      <div className={`flex items-center bg-white border rounded-sm shadow-sm transition-all duration-150 ${
+        isFocused ? 'border-blue-400 shadow-md' : 'border-stone-300'
       }`}>
         <Search size={14} className="ml-3 text-stone-400 shrink-0" strokeWidth={2} />
         <input
@@ -48,7 +48,7 @@ export default function MapSearchBar({ parcels, onSelectParcel }) {
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 180)}
           placeholder="Search parcel ID, ward, district…"
-          className="w-full px-2.5 py-2 text-[12px] text-stone-800 placeholder-stone-400 bg-transparent outline-none"
+          className="w-full px-2.5 py-1.5 text-[11px] text-stone-800 placeholder-stone-400 bg-transparent outline-none"
         />
         {query && (
           <button onClick={handleClear} className="mr-2 text-stone-400 hover:text-stone-700">
@@ -58,7 +58,7 @@ export default function MapSearchBar({ parcels, onSelectParcel }) {
       </div>
 
       {showDropdown && (
-        <div className="absolute top-full mt-1.5 left-0 right-0 bg-white border border-stone-200 rounded-lg shadow-lg z-[2000] overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-stone-200 rounded-sm shadow-md z-[2000] overflow-hidden">
           {results.length === 0 ? (
             <div className="px-3 py-3 text-[12px] text-stone-400 italic">No parcels found</div>
           ) : (

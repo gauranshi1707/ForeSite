@@ -145,25 +145,34 @@ function ParcelTooltip({ parcel, selectedYear }) {
     selectedYear === 2026 ? (traj === 'GROWING FAST' ? 'Growing Fast' : 'Growing') : 'Re-check Required';
 
   return (
-    <div style={{ fontFamily: 'Inter, system-ui, sans-serif', minWidth: 190 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>
-        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 13, color: '#111827' }}>
+    <div style={{ fontFamily: 'Inter, system-ui, sans-serif', minWidth: 160, padding: '2px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1px solid #e5e7eb' }}>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 11, color: '#111827' }}>
           {parcel.parcel_id}
         </span>
         {parcel.is_hero && (
-          <span style={{ fontSize: 9, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>
+          <span style={{ fontSize: 8, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '1px 3px', fontWeight: 700 }}>
             HERO
           </span>
         )}
       </div>
-      <div style={{ fontSize: 11, color: '#374151', lineHeight: 1.9 }}>
-        <div><span style={{ color: '#6b7280' }}>{selectedYear === 2027 ? 'Scenario' : 'Observation'}</span> <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: selectedYear === 2027 ? '#b91c1c' : '#1d4ed8' }}>{selectedYear} {selectedYear === 2027 && <span style={{fontSize: 9}}>PROJ</span>}</span></div>
-        <div><span style={{ color: '#6b7280' }}>Built-up</span> <span style={{ fontWeight: 700 }}>{changeArea} m²</span></div>
-        <div><span style={{ color: '#6b7280' }}>Status</span> <span style={{ fontWeight: 600, color: trajColor }}>{yearStatus}</span></div>
-        <div><span style={{ color: '#6b7280' }}>Priority</span> <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: scoreColor }}>{score}/100</span></div>
-      </div>
-      <div style={{ marginTop: 6, fontSize: 10, color: '#9ca3af', fontStyle: 'italic' }}>
-        Click to inspect parcel
+      <div style={{ fontSize: 10, color: '#374151', lineHeight: 1.6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#6b7280' }}>{selectedYear === 2027 ? 'Scenario' : 'Observation'}</span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: selectedYear === 2027 ? '#b91c1c' : '#1d4ed8' }}>{selectedYear} {selectedYear === 2027 && <span style={{fontSize: 7}}>PROJ</span>}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#6b7280' }}>Built-up</span>
+          <span style={{ fontWeight: 700 }}>{changeArea} m²</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#6b7280' }}>Status</span>
+          <span style={{ fontWeight: 600, color: trajColor }}>{yearStatus}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#6b7280' }}>Priority</span>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: scoreColor }}>{score}/100</span>
+        </div>
       </div>
     </div>
   );

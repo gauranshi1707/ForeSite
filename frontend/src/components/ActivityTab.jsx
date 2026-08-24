@@ -1,226 +1,256 @@
-import React, { useMemo } from 'react';
-import { Clock, RotateCcw, FileCheck, AlertTriangle, CheckCircle2, Eye, Search, Calendar } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { RotateCcw, AlertTriangle, CheckCircle2, Search, FileCheck, Clock } from 'lucide-react';
+import { getReports } from '../services/store';
 
 // ----------------------------------------------------------------
-// Aggregate audit trails from all parcels into a flat timeline
+// Build flat activity feed from parcel audit trails + community reports
 // ----------------------------------------------------------------
 function buildActivityFeed(parcels) {
   const events = [];
+
   parcels.forEach(parcel => {
     if (!parcel.audit_trail) return;
     parcel.audit_trail.forEach(log => {
       events.push({
-        parcel_id: parcel.parcel_id,
-        parcel: parcel,
-        timestamp: log.timestamp,
-        event: log.event,
-        actor: log.actor,
-        status: parcel.status,
+        id:            `${parcel.parcel_id}-${log.timestamp}`,
+        parcel_id:     parcel.parcel_id,
+        parcel:        parcel,
+        timestamp:     log.timestamp,
+        event:         log.event,
+        actor:         log.actor,
+        status:        parcel.status,
         urgency_score: parcel.urgency_score,
+        category:      classifyEvent(log.event).category,
+        ward:          parcel.ward,
+        district:      parcel.district,
       });
     });
   });
 
-  // Sort by timestamp descending (newer first)
+  // Community reports from localStorage
+  try {
+    const reports = getReports();
+    reports.forEach(r => {
+      events.push({
+        id:            r.id,
+        parcel_id:     r.id,
+        parcel:        null,
+        timestamp:     r.date ? r.date.replace('T', ' ').slice(0, 16) : '',
+        event:         `Community report submitted — ${r.type}`,
+        actor:         'Community User',
+        status:        r.status,
+        urgency_score: null,
+        category:      'community',
+        ward:          r.locationDetails || '',
+        district:      '',
+      });
+    });
+  } catch (_) {}
+
   events.sort((a, b) => {
     const ta = new Date(a.timestamp.replace(/\//g, '-'));
     const tb = new Date(b.timestamp.replace(/\//g, '-'));
     return tb - ta;
   });
 
-  return events.slice(0, 200); // Show max 200 events
+  return events.slice(0, 300);
 }
 
 // ----------------------------------------------------------------
-// Categorize event type from text
+// Classify event into a category
 // ----------------------------------------------------------------
-function classifyEvent(event, status) {
+function classifyEvent(event = '') {
   const ev = event.toLowerCase();
   if (ev.includes('re-check') || ev.includes('recheck') || ev.includes('re-escalat')) {
-    return { icon: RotateCcw, color: 'text-rose-600', bg: 'bg-rose-50 border-rose-200', label: 'Re-check' };
+    return { label: 'Re-check',      category: 'official', dotCls: 'bg-red-500',    textCls: 'text-red-700' };
   }
   if (ev.includes('notice')) {
-    return { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200', label: 'Notice' };
+    return { label: 'Notice',        category: 'official', dotCls: 'bg-amber-400',  textCls: 'text-amber-700' };
   }
   if (ev.includes('resolved') || ev.includes('cleared')) {
-    return { icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50 border-green-200', label: 'Resolved' };
+    return { label: 'Resolved',      category: 'official', dotCls: 'bg-green-500',  textCls: 'text-green-700' };
   }
   if (ev.includes('inspection') || ev.includes('field')) {
-    return { icon: Search, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200', label: 'Inspection' };
+    return { label: 'Inspection',    category: 'official', dotCls: 'bg-blue-500',   textCls: 'text-blue-700' };
+  }
+  if (ev.includes('action recorded') || ev.includes('status changed') || ev.includes('recorded')) {
+    return { label: 'Official Action', category: 'official', dotCls: 'bg-blue-600', textCls: 'text-blue-700' };
   }
   if (ev.includes('alert') || ev.includes('priority') || ev.includes('change detected') || ev.includes('expansion')) {
-    return { icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50 border-orange-200', label: 'Alert' };
+    return { label: 'System Alert',  category: 'system',   dotCls: 'bg-orange-400', textCls: 'text-orange-700' };
   }
-  return { icon: Clock, color: 'text-stone-500', bg: 'bg-stone-50 border-stone-200', label: 'Event' };
+  return   { label: 'Event',         category: 'system',   dotCls: 'bg-stone-400',  textCls: 'text-stone-500' };
 }
 
 // ----------------------------------------------------------------
-// Group events by date
+// Format timestamp
 // ----------------------------------------------------------------
-function groupByDate(events) {
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const groups = new Map();
-
-  events.forEach(ev => {
-    const evDate = new Date(ev.timestamp.replace(/\//g, '-'));
-    let groupKey;
-    if (
-      evDate.getFullYear() === today.getFullYear() &&
-      evDate.getMonth() === today.getMonth() &&
-      evDate.getDate() === today.getDate()
-    ) {
-      groupKey = 'Today';
-    } else if (
-      evDate.getFullYear() === yesterday.getFullYear() &&
-      evDate.getMonth() === yesterday.getMonth() &&
-      evDate.getDate() === yesterday.getDate()
-    ) {
-      groupKey = 'Yesterday';
-    } else {
-      // Format: Jun 2026
-      groupKey = evDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    }
-
-    if (!groups.has(groupKey)) groups.set(groupKey, []);
-    groups.get(groupKey).push(ev);
-  });
-
-  return groups;
+function formatTs(ts) {
+  if (!ts) return { date: '—', time: '' };
+  const d = new Date(ts.replace(/\//g, '-'));
+  if (isNaN(d.getTime())) return { date: ts, time: '' };
+  const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return { date, time };
 }
+
+// ----------------------------------------------------------------
+// Filter tabs
+// ----------------------------------------------------------------
+const FILTERS = [
+  { key: 'all',       label: 'All Activity' },
+  { key: 'system',    label: 'System' },
+  { key: 'official',  label: 'Official Actions' },
+  { key: 'community', label: 'Community Reports' },
+];
 
 // ----------------------------------------------------------------
 // Main component
 // ----------------------------------------------------------------
 export default function ActivityTab({ parcels, onSelectParcel, onNavigateToOverview }) {
+  const [activeFilter, setActiveFilter] = useState('all');
+
   const activityFeed = useMemo(() => buildActivityFeed(parcels), [parcels]);
-  const grouped = useMemo(() => groupByDate(activityFeed), [activityFeed]);
+
+  const filtered = useMemo(() => {
+    if (activeFilter === 'all') return activityFeed;
+    return activityFeed.filter(e => e.category === activeFilter);
+  }, [activityFeed, activeFilter]);
 
   const handleOpenParcel = (parcel) => {
+    if (!parcel) return;
     onSelectParcel(parcel);
     onNavigateToOverview();
   };
 
-  // Summary stats
-  const todayEvents = grouped.get('Today')?.length ?? 0;
-  const recheckEvents = activityFeed.filter(e => classifyEvent(e.event, e.status).label === 'Re-check').length;
-  const noticeEvents = activityFeed.filter(e => classifyEvent(e.event, e.status).label === 'Notice').length;
+  const counts = {
+    official:  activityFeed.filter(e => e.category === 'official').length,
+    system:    activityFeed.filter(e => e.category === 'system').length,
+    community: activityFeed.filter(e => e.category === 'community').length,
+  };
 
   return (
     <div className="flex-1 overflow-y-auto bg-stone-50">
-      <div className="max-w-[900px] mx-auto px-5 py-5 space-y-5">
+      <div className="max-w-[860px] mx-auto px-6 py-5">
 
-        {/* Header */}
-        <div className="flex items-start justify-between">
+        {/* Page header */}
+        <div className="flex items-end justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold text-stone-900">Activity & Verification</h2>
-            <p className="text-[12px] text-stone-500 mt-0.5">
-              Operational history — inspections, notices, re-checks, and resolutions
-            </p>
+            <h2 className="text-[14px] font-bold text-stone-900">Activity</h2>
+            <p className="text-[12px] text-stone-500 mt-0.5">System and field activity across monitored parcels</p>
           </div>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="bg-stone-100 border border-stone-200 text-stone-600 px-2.5 py-1 rounded-full font-medium">
-              {activityFeed.length} events
-            </span>
-            {recheckEvents > 0 && (
-              <span className="bg-rose-50 border border-rose-200 text-rose-700 px-2.5 py-1 rounded-full font-semibold">
-                {recheckEvents} re-checks
-              </span>
-            )}
-            {noticeEvents > 0 && (
-              <span className="bg-amber-50 border border-amber-200 text-amber-700 px-2.5 py-1 rounded-full font-semibold">
-                {noticeEvents} notices
-              </span>
-            )}
-          </div>
+          <span className="text-[11px] text-stone-500">
+            <span className="font-semibold text-stone-800">{activityFeed.length}</span> events
+          </span>
         </div>
 
-        {/* Workflow cycle explanation */}
-        <div className="fs-card p-4">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-3">Monitoring Cycle</div>
-          <div className="flex items-center gap-0">
-            {['Monitor', 'Detect', 'Prioritize', 'Verify', 'Act', 'Re-check'].map((step, i, arr) => (
-              <React.Fragment key={step}>
-                <div className="flex flex-col items-center text-center flex-1">
-                  <div className={`text-[10px] font-semibold px-2 py-1 rounded ${
-                    step === 'Re-check' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
-                    step === 'Act' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
-                    step === 'Verify' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                    'bg-stone-100 text-stone-600 border border-stone-200'
-                  }`}>{step}</div>
-                </div>
-                {i < arr.length - 1 && <div className="text-stone-300 text-xs mx-0.5">→</div>}
-              </React.Fragment>
-            ))}
-          </div>
+        {/* Monitoring cycle — simple inline text */}
+        <div className="text-[11px] text-stone-500 mb-4 pb-3 border-b border-stone-200 flex items-center gap-1.5 flex-wrap">
+          <span className="font-semibold text-stone-600 mr-1">Monitoring cycle:</span>
+          {['Monitor', 'Detect', 'Prioritize', 'Verify', 'Act', 'Re-check'].map((step, i, arr) => (
+            <React.Fragment key={step}>
+              <span className={step === 'Re-check' ? 'text-red-600 font-semibold' : step === 'Act' || step === 'Verify' ? 'text-blue-700 font-medium' : 'text-stone-600'}>
+                {step}
+              </span>
+              {i < arr.length - 1 && <span className="text-stone-300">→</span>}
+            </React.Fragment>
+          ))}
         </div>
 
-        {/* Activity timeline */}
-        {Array.from(grouped.entries()).map(([dateLabel, events]) => (
-          <div key={dateLabel}>
-            {/* Date group header */}
-            <div className="flex items-center gap-3 mb-3">
-              <Calendar size={13} className="text-stone-400" />
-              <span className="text-[12px] font-semibold text-stone-600">{dateLabel}</span>
-              <div className="flex-1 h-px bg-stone-200" />
-              <span className="text-[11px] text-stone-400">{events.length} events</span>
-            </div>
+        {/* Filter tabs */}
+        <div className="flex items-center gap-6 border-b border-stone-200 mb-4">
+          {FILTERS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveFilter(tab.key)}
+              className={`pb-2.5 text-[12px] font-medium border-b-2 transition-colors whitespace-nowrap -mb-px ${
+                activeFilter === tab.key
+                  ? 'border-blue-700 text-stone-900'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
+              }`}
+            >
+              {tab.label}
+              {tab.key !== 'all' && counts[tab.key] > 0 && (
+                <span className="ml-1 text-[10px] text-stone-400">({counts[tab.key]})</span>
+              )}
+            </button>
+          ))}
+          <span className="ml-auto text-[11px] text-stone-400 pb-2.5">{filtered.length} entries</span>
+        </div>
 
-            {/* Events */}
-            <div className="space-y-2">
-              {events.map((ev, i) => {
-                const evType = classifyEvent(ev.event, ev.status);
-                const Icon = evType.icon;
-                const score = ev.urgency_score;
-                const scoreColor = score >= 80 ? 'text-red-700' : score >= 60 ? 'text-amber-700' : 'text-stone-500';
+        {/* Activity log */}
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 text-[13px] text-stone-400">No activity events recorded yet.</div>
+        ) : (
+          <div className="bg-white border border-stone-200 rounded divide-y divide-stone-100">
+            {filtered.map((ev, i) => {
+              const evType = ev.category === 'community'
+                ? { label: 'Community', dotCls: 'bg-stone-400', textCls: 'text-stone-600', category: 'community' }
+                : classifyEvent(ev.event);
+              const { date, time } = formatTs(ev.timestamp);
+              const score = ev.urgency_score;
+              const scoreColor = score >= 80 ? 'text-red-700' : score >= 60 ? 'text-amber-700' : 'text-stone-500';
+              const isCommunity = ev.category === 'community';
 
-                return (
-                  <div
-                    key={i}
-                    onClick={() => handleOpenParcel(ev.parcel)}
-                    className="fs-card p-3 cursor-pointer hover:bg-stone-50 transition-colors flex items-start gap-3"
-                  >
-                    {/* Event icon */}
-                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${evType.bg}`}>
-                      <Icon size={12} className={evType.color} />
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono font-bold text-[12px] text-stone-900">{ev.parcel_id}</span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${evType.bg} ${evType.color}`}>
-                          {evType.label}
-                        </span>
-                        <span className={`font-mono text-[10px] font-bold ${scoreColor}`}>{score}/100</span>
-                      </div>
-                      <div className="text-[11px] text-stone-700 mt-1 leading-snug line-clamp-2">{ev.event}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] text-stone-400 font-mono">{ev.timestamp}</span>
-                        <span className="text-stone-200">·</span>
-                        <span className="text-[10px] text-stone-400">{ev.actor}</span>
-                      </div>
-                    </div>
-
-                    {/* Navigate button */}
-                    <button
-                      onClick={e => { e.stopPropagation(); handleOpenParcel(ev.parcel); }}
-                      className="shrink-0 p-1.5 rounded-md border border-stone-200 text-stone-400 hover:bg-blue-700 hover:text-white hover:border-blue-700 transition-colors"
-                    >
-                      <Eye size={12} />
-                    </button>
+              return (
+                <div
+                  key={ev.id || i}
+                  onClick={() => !isCommunity && ev.parcel && handleOpenParcel(ev.parcel)}
+                  className={`flex items-start gap-4 px-4 py-3 text-[11px] ${!isCommunity && ev.parcel ? 'cursor-pointer hover:bg-stone-50' : ''} transition-colors`}
+                >
+                  {/* Timestamp */}
+                  <div className="w-28 shrink-0 text-right">
+                    <div className="text-[11px] text-stone-700 font-medium">{date}</div>
+                    <div className="text-[10px] text-stone-400 font-mono mt-0.5">{time}</div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
 
-        {activityFeed.length === 0 && (
-          <div className="text-center py-16 text-stone-400 text-[13px]">
-            No activity events recorded yet.
+                  {/* Dot */}
+                  <div className="flex flex-col items-center shrink-0 pt-1">
+                    <div className={`w-2 h-2 rounded-full ${evType.dotCls}`} />
+                    {i < filtered.length - 1 && <div className="w-px flex-1 bg-stone-200 mt-1.5 min-h-[16px]" />}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 pb-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        {/* Actor + event type */}
+                        <div className="flex items-baseline gap-2">
+                          <span className="font-semibold text-stone-800">{ev.actor}</span>
+                          <span className={`text-[10px] font-medium ${evType.textCls}`}>{evType.label}</span>
+                        </div>
+
+                        {/* Event description */}
+                        <div className="mt-0.5 text-stone-700 leading-snug">{ev.event}</div>
+
+                        {/* Parcel / location / score */}
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-stone-500 flex-wrap">
+                          <span className="font-mono font-semibold text-stone-800">{ev.parcel_id}</span>
+                          {ev.ward && <span>· {ev.ward}</span>}
+                          {ev.district && <span>· {ev.district}</span>}
+                          {score != null && (
+                            <span className={`font-mono font-semibold ${scoreColor}`}>· P: {score}/100</span>
+                          )}
+                          {ev.status && !isCommunity && (
+                            <span className="text-stone-400">· {ev.status}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* View link — only for parcel events */}
+                      {ev.parcel && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleOpenParcel(ev.parcel); }}
+                          className="shrink-0 self-start mt-0.5 text-[11px] font-medium text-blue-700 hover:underline"
+                        >
+                          View
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -14,64 +14,50 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
       {/* Top bar: Logo + Location + User */}
-      <div className="px-5 py-2.5 flex items-center justify-between gap-4 border-b border-stone-100">
+      <div className="px-5 py-2 flex items-center justify-between gap-4 border-b border-stone-100">
         <div className="flex items-center gap-3">
           {/* Logo mark */}
-          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-700">
-            <Globe className="w-4.5 h-4.5 text-white" size={18} strokeWidth={2} />
+          <div className="flex items-center justify-center w-7 h-7 rounded-sm bg-blue-700">
+            <Globe className="w-4 h-4 text-white" size={16} strokeWidth={2} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-stone-900 tracking-tight leading-none">
+              <h1 className="text-[15px] font-bold text-stone-900 tracking-tight leading-none">
                 ForeSite
               </h1>
-              <span className="text-[10px] font-medium text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded leading-none">
+              <span className="text-[9px] font-bold text-stone-500 uppercase tracking-wider leading-none">
                 SIH 2026
               </span>
             </div>
-            <p className="text-[11px] text-stone-500 leading-none mt-0.5 font-medium">
-              Predictive Land-Change Intelligence
-            </p>
           </div>
         </div>
 
         {/* Location context */}
-        <div className="hidden md:flex items-center gap-1.5 text-[11px] text-stone-500">
-          <span className="font-medium text-stone-700">{locationContext?.state || 'Delhi NCR'}</span>
+        <div className="hidden md:flex items-center gap-2 text-[10px] text-stone-500 font-mono">
+          <span className="font-semibold text-stone-700">{locationContext?.state || 'DELHI NCR'}</span>
           <span className="text-stone-300">/</span>
-          <span>{locationContext?.district || 'South West Delhi'}</span>
+          <span>{locationContext?.district || 'SOUTH WEST DELHI'}</span>
           <span className="text-stone-300">/</span>
-          <span>{locationContext?.ward || 'Dwarka Zone 3'}</span>
-          {locationContext?.category && (
-            <>
-              <span className="text-stone-300">·</span>
-              <span className="italic text-stone-400">{locationContext.category}</span>
-            </>
-          )}
+          <span>{locationContext?.ward || 'DWARKA ZONE 3'}</span>
         </div>
 
         {/* User badge */}
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-3 text-[10px]">
             {/* KPI strip — tiny */}
-            <div className="hidden lg:flex items-center gap-3 mr-2 text-stone-500">
-              <span>
+            <div className="hidden lg:flex items-center gap-3 mr-3 text-stone-500">
+              <span className="flex items-center gap-1">
                 <span className="font-bold text-stone-800 font-mono">{stats?.total_parcels?.toLocaleString() || '1,000'}</span>
-                {' '}monitored
+                MONITORED
               </span>
-              <span className="text-stone-300">|</span>
-              <span>
+              <span className="text-stone-200">|</span>
+              <span className="flex items-center gap-1">
                 <span className="font-bold text-amber-700 font-mono">{stats?.active_alerts?.toLocaleString() || '—'}</span>
-                {' '}active alerts
+                ACTIVE
               </span>
-              <span className="text-stone-300">|</span>
-              <span>
+              <span className="text-stone-200">|</span>
+              <span className="flex items-center gap-1">
                 <span className="font-bold text-red-700 font-mono">{stats?.high_priority?.toLocaleString() || '—'}</span>
-                {' '}high priority
-              </span>
-              <span className="text-stone-300">|</span>
-              <span>
-                <span className="font-bold text-rose-700 font-mono">{stats?.requiring_recheck?.toLocaleString() || '—'}</span>
-                {' '}re-check
+                HIGH PRIORITY
               </span>
             </div>
             <ProfileSwitcher />
@@ -79,7 +65,7 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
       </div>
 
       {/* Tab navigation */}
-      <nav className="px-5 flex items-center gap-0 w-full">
+      <nav className="px-5 flex items-center gap-6 w-full">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -88,25 +74,17 @@ export default function AppHeader({ activeTab, onTabChange, stats, locationConte
               key={tab.id}
               id={`tab-${tab.id}`}
               onClick={() => onTabChange(tab.id)}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors duration-150 whitespace-nowrap ${
+              className={`flex items-center gap-1.5 py-2 text-[12px] font-medium border-b-[3px] transition-colors duration-150 whitespace-nowrap ${
                 isActive
-                  ? 'border-blue-700 text-blue-700'
-                  : 'border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300'
+                  ? 'border-blue-700 text-stone-900 font-semibold'
+                  : 'border-transparent text-stone-500 hover:text-stone-800'
               }`}
             >
-              <Icon size={14} strokeWidth={isActive ? 2.2 : 1.8} />
+              <Icon size={13} strokeWidth={isActive ? 2 : 1.5} className={isActive ? "text-blue-700" : ""} />
               {tab.label}
             </button>
           );
         })}
-        {onOpenPipeline && (
-          <button
-            onClick={onOpenPipeline}
-            className="ml-auto mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 hover:text-blue-800 transition-colors border border-blue-200 bg-blue-50/50 hover:bg-blue-50 px-2.5 py-1 rounded"
-          >
-            ⚙ How it Works
-          </button>
-        )}
       </nav>
     </header>
   );
